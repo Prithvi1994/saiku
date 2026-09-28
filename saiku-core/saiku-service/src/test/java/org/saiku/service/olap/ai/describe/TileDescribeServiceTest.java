@@ -58,7 +58,8 @@ public class TileDescribeServiceTest {
 
         assertEquals("claude-test", root.path("model").asText());
         assertEquals("tool", root.path("tool_choice").path("type").asText());
-        assertEquals("emit_tile_description", root.path("tool_choice").path("name").asText());
+        assertEquals(
+                "emit_tile_description", root.path("tool_choice").path("name").asText());
 
         JsonNode tools = root.path("tools");
         assertEquals(1, tools.size());

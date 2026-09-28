@@ -116,10 +116,12 @@ public class TileDescribeService implements TileDescriber {
                 Thread.currentThread().interrupt();
             }
             LOG.warn("describe-query upstream call failed: {}", e.toString());
-            return DescribeQueryResult.degraded("Transport error: " + e.getClass().getSimpleName());
+            return DescribeQueryResult.degraded(
+                    "Transport error: " + e.getClass().getSimpleName());
         } catch (RuntimeException e) {
             LOG.warn("describe-query upstream call failed unexpectedly: {}", e.toString());
-            return DescribeQueryResult.degraded("Unexpected error: " + e.getClass().getSimpleName());
+            return DescribeQueryResult.degraded(
+                    "Unexpected error: " + e.getClass().getSimpleName());
         }
     }
 
@@ -172,7 +174,8 @@ public class TileDescribeService implements TileDescriber {
         JsonNode content = root.path("content");
         if (content.isArray()) {
             for (JsonNode block : content) {
-                if (!"tool_use".equals(block.path("type").asText()) || !TOOL_NAME.equals(block.path("name").asText())) {
+                if (!"tool_use".equals(block.path("type").asText())
+                        || !TOOL_NAME.equals(block.path("name").asText())) {
                     continue;
                 }
                 JsonNode input = block.path("input");

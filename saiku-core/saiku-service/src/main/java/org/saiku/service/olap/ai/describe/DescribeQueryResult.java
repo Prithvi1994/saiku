@@ -20,8 +20,8 @@ public record DescribeQueryResult(
         int promptTokens,
         int responseTokens) {
 
-    public static DescribeQueryResult ok(String title, String description, String model, int promptTokens,
-            int responseTokens) {
+    public static DescribeQueryResult ok(
+            String title, String description, String model, int promptTokens, int responseTokens) {
         return new DescribeQueryResult(false, title, description, null, model, promptTokens, responseTokens);
     }
 
