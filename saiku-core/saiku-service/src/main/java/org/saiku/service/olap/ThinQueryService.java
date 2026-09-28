@@ -1234,6 +1234,13 @@ public class ThinQueryService implements Serializable {
             Cube cub = olapDiscoverService.getNativeCube(old.getCube());
             Query q = Fat.convert(old, cub);
             QueryHierarchy qh = q.getHierarchy(target.getHierarchy());
+            // A freshly built Query starts every one of the cube's hierarchies parked on its
+            // internal "unused" axis; Fat.convert only moves one onto ROWS/COLUMNS/FILTER when
+            // the source ThinQuery has a structured queryModel to read the placement from. The
+            // query this drill starts from is raw MDX (ThinQuery.Type.MDX, queryModel == null),
+            // so `qh` is still unused here — every member/level we set on it below would be
+            // silently dropped from the generated MDX without this.
+            q.moveHierarchy(qh, Axis.ROWS);
             // With two active levels on the same hierarchy, the MDX generator's default
             // "consistent" mode wraps every other level in Exists(..., <this level's set>)
             // so they only keep members related to it. That's right for "expand a whole
@@ -1242,12 +1249,11 @@ public class ThinQueryService implements Serializable {
             // row. Disabling it keeps the levels independent: parent rows untouched, children
             // simply unioned in and nested under their parent by Hierarchize.
             qh.setConsistent(false);
-            // Fat.convert only rebuilds hierarchy/level state from a ThinQuery's structured
-            // queryModel; a query executed straight from raw MDX (ThinQuery.Type.MDX, e.g. the
-            // query this drill starts from) has none, so `qh` above starts with zero active
-            // levels no matter what's actually on screen. Seed it from the rows the last
-            // cellset is really showing so adding the drilled member's children augments the
-            // current view instead of replacing it with just those children.
+            // Fat.convert also never populates level content for a queryModel-less ThinQuery,
+            // so `qh` has zero active levels no matter what's actually on screen. Seed it from
+            // the rows the last cellset is really showing so adding the drilled member's
+            // children augments the current view instead of replacing it with just those
+            // children.
             seedHierarchyFromCurrentRows(qh, cs, target.getHierarchy());
             for (SaikuMember child : children) {
                 qh.includeMember(child.getUniqueName());
@@ -1287,10 +1293,12 @@ public class ThinQueryService implements Serializable {
             Cube cub = olapDiscoverService.getNativeCube(old.getCube());
             Query q = Fat.convert(old, cub);
             QueryHierarchy qh = q.getHierarchy(target.getHierarchy());
-            // See the matching comments in drillDown: keep any other still-expanded level on
-            // this hierarchy from being Exists()-narrowed against this member's (former)
-            // children, and seed the rows Fat.convert didn't carry over, before editing
-            // inclusions below.
+            // See the matching comments in drillDown: a freshly built Query parks every
+            // hierarchy on its "unused" axis until something moves it onto ROWS, keep any
+            // other still-expanded level on this hierarchy from being Exists()-narrowed
+            // against this member's (former) children, and seed the rows Fat.convert didn't
+            // carry over, before editing inclusions below.
+            q.moveHierarchy(qh, Axis.ROWS);
             qh.setConsistent(false);
             seedHierarchyFromCurrentRows(qh, cs, target.getHierarchy());
             for (SaikuMember child : children) {
