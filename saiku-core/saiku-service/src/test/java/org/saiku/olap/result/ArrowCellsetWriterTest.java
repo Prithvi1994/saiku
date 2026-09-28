@@ -323,11 +323,9 @@ public class ArrowCellsetWriterTest {
         Map<Property.StandardCellProperty, Object> col0Row0Props = new HashMap<>();
         col0Row0Props.put(Property.StandardCellProperty.FORMAT_STRING, "$#,##0.00");
         col0Row0Props.put(Property.StandardCellProperty.FORE_COLOR, "16711680");
+        cellByCoord.put(Arrays.asList(0, 0), cellWithProperties(false, false, false, 1.0, "1.0", col0Row0Props, null));
         cellByCoord.put(
-                Arrays.asList(0, 0), cellWithProperties(false, false, false, 1.0, "1.0", col0Row0Props, null));
-        cellByCoord.put(
-                Arrays.asList(0, 1),
-                cellWithProperties(false, false, false, 2.0, "2.0", Collections.emptyMap(), null));
+                Arrays.asList(0, 1), cellWithProperties(false, false, false, 2.0, "2.0", Collections.emptyMap(), null));
         cellByCoord.put(
                 Arrays.asList(0, 2),
                 cellWithProperties(false, false, true, 0.0, null, Collections.emptyMap(), "Divide by zero"));
