@@ -27,6 +27,7 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -38,6 +39,7 @@ import org.olap4j.Axis;
 import org.olap4j.CellSet;
 import org.olap4j.CellSetAxis;
 import org.olap4j.OlapConnection;
+import org.olap4j.OlapException;
 import org.olap4j.OlapStatement;
 import org.olap4j.Position;
 import org.olap4j.mdx.ParseTreeNode;
@@ -1240,6 +1242,13 @@ public class ThinQueryService implements Serializable {
             // row. Disabling it keeps the levels independent: parent rows untouched, children
             // simply unioned in and nested under their parent by Hierarchize.
             qh.setConsistent(false);
+            // Fat.convert only rebuilds hierarchy/level state from a ThinQuery's structured
+            // queryModel; a query executed straight from raw MDX (ThinQuery.Type.MDX, e.g. the
+            // query this drill starts from) has none, so `qh` above starts with zero active
+            // levels no matter what's actually on screen. Seed it from the rows the last
+            // cellset is really showing so adding the drilled member's children augments the
+            // current view instead of replacing it with just those children.
+            seedHierarchyFromCurrentRows(qh, cs, target.getHierarchy());
             for (SaikuMember child : children) {
                 qh.includeMember(child.getUniqueName());
             }
@@ -1278,10 +1287,12 @@ public class ThinQueryService implements Serializable {
             Cube cub = olapDiscoverService.getNativeCube(old.getCube());
             Query q = Fat.convert(old, cub);
             QueryHierarchy qh = q.getHierarchy(target.getHierarchy());
-            // See the matching comment in drillDown: keep any other still-expanded level on
+            // See the matching comments in drillDown: keep any other still-expanded level on
             // this hierarchy from being Exists()-narrowed against this member's (former)
-            // children while we edit its inclusions below.
+            // children, and seed the rows Fat.convert didn't carry over, before editing
+            // inclusions below.
             qh.setConsistent(false);
+            seedHierarchyFromCurrentRows(qh, cs, target.getHierarchy());
             for (SaikuMember child : children) {
                 qh.excludeMember(child.getUniqueName());
             }
@@ -1307,13 +1318,7 @@ public class ThinQueryService implements Serializable {
      * to when the row header crosses more than one hierarchy.
      */
     private Member resolveRowMember(CellSet cs, int rowIndex) {
-        CellSetAxis rowsAxis = null;
-        for (CellSetAxis axis : cs.getAxes()) {
-            if (axis.getAxisOrdinal().equals(Axis.ROWS)) {
-                rowsAxis = axis;
-                break;
-            }
-        }
+        CellSetAxis rowsAxis = getAxis(cs, Axis.ROWS);
         if (rowsAxis == null
                 || rowIndex < 0
                 || rowIndex >= rowsAxis.getPositions().size()) {
@@ -1333,6 +1338,45 @@ public class ThinQueryService implements Serializable {
             throw new SaikuServiceException("Cannot resolve a drillable member for row " + rowIndex);
         }
         return deepest;
+    }
+
+    /**
+     * Includes every distinct, non-ALL member of {@code hierarchy} that the ROWS axis of
+     * {@code cs} is currently displaying. See the callers in drillDown/drillUp for why this is
+     * needed: {@link Fat#convert} leaves a freshly converted {@link QueryHierarchy} with zero
+     * active levels whenever the source query has no structured queryModel (raw-MDX queries,
+     * including the one this feature starts from), so without this the hierarchy's existing rows
+     * would be silently dropped rather than kept alongside the drilled member's children.
+     * {@code includeMember} is idempotent (it no-ops a member already in a level's inclusions),
+     * so re-seeding a queryModel-origin hierarchy that Fat.convert already populated is harmless.
+     */
+    private void seedHierarchyFromCurrentRows(QueryHierarchy qh, CellSet cs, Hierarchy hierarchy) throws OlapException {
+        CellSetAxis rowsAxis = getAxis(cs, Axis.ROWS);
+        if (rowsAxis == null) {
+            return;
+        }
+        LinkedHashSet<String> uniqueNames = new LinkedHashSet<>();
+        for (Position pos : rowsAxis.getPositions()) {
+            for (Member m : pos.getMembers()) {
+                if (m != null
+                        && hierarchy.equals(m.getHierarchy())
+                        && !Level.Type.ALL.equals(m.getLevel().getLevelType())) {
+                    uniqueNames.add(m.getUniqueName());
+                }
+            }
+        }
+        for (String uniqueName : uniqueNames) {
+            qh.includeMember(uniqueName);
+        }
+    }
+
+    private CellSetAxis getAxis(CellSet cs, Axis axis) {
+        for (CellSetAxis a : cs.getAxes()) {
+            if (a.getAxisOrdinal().equals(axis)) {
+                return a;
+            }
+        }
+        return null;
     }
 
     public ThinQuery drillacross(String queryName, List<Integer> cellPosition, Map<String, List<String>> levels) {
