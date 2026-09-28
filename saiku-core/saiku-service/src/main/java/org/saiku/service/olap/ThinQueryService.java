@@ -1232,6 +1232,14 @@ public class ThinQueryService implements Serializable {
             Cube cub = olapDiscoverService.getNativeCube(old.getCube());
             Query q = Fat.convert(old, cub);
             QueryHierarchy qh = q.getHierarchy(target.getHierarchy());
+            // With two active levels on the same hierarchy, the MDX generator's default
+            // "consistent" mode wraps every other level in Exists(..., <this level's set>)
+            // so they only keep members related to it. That's right for "expand a whole
+            // level", but here the child level holds just one row's children, so it would
+            // collapse the parent level down to that single ancestor and drop every sibling
+            // row. Disabling it keeps the levels independent: parent rows untouched, children
+            // simply unioned in and nested under their parent by Hierarchize.
+            qh.setConsistent(false);
             for (SaikuMember child : children) {
                 qh.includeMember(child.getUniqueName());
             }
@@ -1270,6 +1278,10 @@ public class ThinQueryService implements Serializable {
             Cube cub = olapDiscoverService.getNativeCube(old.getCube());
             Query q = Fat.convert(old, cub);
             QueryHierarchy qh = q.getHierarchy(target.getHierarchy());
+            // See the matching comment in drillDown: keep any other still-expanded level on
+            // this hierarchy from being Exists()-narrowed against this member's (former)
+            // children while we edit its inclusions below.
+            qh.setConsistent(false);
             for (SaikuMember child : children) {
                 qh.excludeMember(child.getUniqueName());
             }
