@@ -126,7 +126,8 @@ public class AiQueryResourceDescribeQueryTest {
         resource.setDescribeService(fake);
 
         AiQueryRequest req = baseQuery();
-        req.setFilters(List.of(new AiFilterSelection("Customer", "Customer", "Name", List.of("Jane Doe"))));
+        req.setFilters(List.of(
+                new AiFilterSelection("Customer", "Customer", "Name", List.of("[Customer].[Customer].[Jane Doe]"))));
         DescribeQueryApiRequest body = new DescribeQueryApiRequest();
         body.setQuery(req);
 
