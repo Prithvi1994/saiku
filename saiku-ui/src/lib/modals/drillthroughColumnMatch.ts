@@ -12,7 +12,10 @@
  * equality; a dimension uniqueName only ever matches as a bracket-prefix of
  * one of its levels' discovered names.
  */
-export function isDrillthroughColumnDiscovered(uniqueName: string, discovered: ReadonlySet<string>): boolean {
+export function isDrillthroughColumnDiscovered(
+	uniqueName: string,
+	discovered: ReadonlySet<string>
+): boolean {
 	if (discovered.has(uniqueName)) return true;
 	const prefix = `${uniqueName}.`;
 	for (const name of discovered) {

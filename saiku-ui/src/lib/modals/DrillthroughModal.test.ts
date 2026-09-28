@@ -20,7 +20,7 @@ import DrillthroughModal from './DrillthroughModal.svelte';
 function bodyFor(props: Record<string, unknown> = {}): string {
 	return render(DrillthroughModal, {
 		props: {
-			dimensions: [{ name: 'Time', caption: 'Time', uniqueName: '[Time]' }],
+			dimensions: [{ name: 'Time', caption: 'Time', uniqueName: '[Time]', hierarchies: [] }],
 			measures: [
 				{ name: 'Store Sales', caption: 'Store Sales', uniqueName: '[Measures].[Store Sales]' }
 			],
