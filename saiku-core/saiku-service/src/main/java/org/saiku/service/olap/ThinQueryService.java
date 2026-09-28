@@ -1199,6 +1199,130 @@ public class ThinQueryService implements Serializable {
         }
     }
 
+    /**
+     * Hierarchy-aware drill down (saiku#776): expand a single row in place by injecting the
+     * clicked member's children as a nested rows-axis entry, leaving every other row untouched.
+     *
+     * <p>Unlike {@link #zoomIn}, which replaces a whole level's selection, this adds the child
+     * level alongside the member's own level so the query hierarchy ends up with more than one
+     * active level — {@link QueryHierarchy#needsHierarchize()} then makes the MDX generator wrap
+     * the axis in {@code Hierarchize()}, which is what produces the nested "parent row followed by
+     * its children" display instead of a flat replacement.
+     *
+     * @param queryName the query name
+     * @param rowIndex the index of the row (on the last executed result's ROWS axis) to drill into
+     * @return the freshly executed result, with the drilled member's children inserted beneath it
+     */
+    public CellDataSet drillDown(String queryName, int rowIndex) {
+        QueryContext qc = context.get(queryName);
+        if (qc == null) {
+            throw new SaikuServiceException("Cannot get query result from context: " + queryName);
+        }
+        CellSet cs = qc.getOlapResult();
+        ThinQuery old = qc.getOlapQuery();
+        if (cs == null) {
+            throw new SaikuServiceException("Cannot drill down if last cellset is null");
+        }
+        Member target = resolveRowMember(cs, rowIndex);
+        List<SaikuMember> children = olapDiscoverService.getMemberChildren(old.getCube(), target.getUniqueName());
+        if (children == null || children.isEmpty()) {
+            throw new SaikuServiceException("Member " + target.getUniqueName() + " has no children to drill into");
+        }
+        try {
+            Cube cub = olapDiscoverService.getNativeCube(old.getCube());
+            Query q = Fat.convert(old, cub);
+            QueryHierarchy qh = q.getHierarchy(target.getHierarchy());
+            for (SaikuMember child : children) {
+                qh.includeMember(child.getUniqueName());
+            }
+            ThinQuery tqAfter = Thin.convert(q, old.getCube());
+            return execute(tqAfter);
+        } catch (Exception e) {
+            throw new SaikuServiceException("Error drilling down on query: " + queryName, e);
+        }
+    }
+
+    /**
+     * Collapse a row previously expanded by {@link #drillDown}: removes exactly the clicked
+     * member's own children from its level's selection, leaving any other independently
+     * drilled-down rows (siblings or elsewhere in the hierarchy) expanded.
+     *
+     * @param queryName the query name
+     * @param rowIndex the index of the previously drilled-down parent row to collapse
+     * @return the freshly executed result, with the drilled member's children removed
+     */
+    public CellDataSet drillUp(String queryName, int rowIndex) {
+        QueryContext qc = context.get(queryName);
+        if (qc == null) {
+            throw new SaikuServiceException("Cannot get query result from context: " + queryName);
+        }
+        CellSet cs = qc.getOlapResult();
+        ThinQuery old = qc.getOlapQuery();
+        if (cs == null) {
+            throw new SaikuServiceException("Cannot drill up if last cellset is null");
+        }
+        Member target = resolveRowMember(cs, rowIndex);
+        List<SaikuMember> children = olapDiscoverService.getMemberChildren(old.getCube(), target.getUniqueName());
+        if (children == null || children.isEmpty()) {
+            throw new SaikuServiceException("Member " + target.getUniqueName() + " has no drilled-down children");
+        }
+        try {
+            Cube cub = olapDiscoverService.getNativeCube(old.getCube());
+            Query q = Fat.convert(old, cub);
+            QueryHierarchy qh = q.getHierarchy(target.getHierarchy());
+            for (SaikuMember child : children) {
+                qh.excludeMember(child.getUniqueName());
+            }
+            // If nothing else on the child level is still expanded, drop the level entirely
+            // rather than leaving an empty active level behind — needsHierarchize() counts
+            // active levels, not populated ones.
+            for (QueryLevel ql : new ArrayList<>(qh.getActiveQueryLevels())) {
+                if (ql.getLevel().getDepth() == target.getLevel().getDepth() + 1
+                        && ql.getInclusions().isEmpty()) {
+                    qh.excludeLevel(ql.getLevel());
+                }
+            }
+            ThinQuery tqAfter = Thin.convert(q, old.getCube());
+            return execute(tqAfter);
+        } catch (Exception e) {
+            throw new SaikuServiceException("Error drilling up on query: " + queryName, e);
+        }
+    }
+
+    /**
+     * Resolves the most specific (deepest, non-ALL) member of the ROWS-axis position at
+     * {@code rowIndex} in the last executed cellset — the member a "drill this row" click refers
+     * to when the row header crosses more than one hierarchy.
+     */
+    private Member resolveRowMember(CellSet cs, int rowIndex) {
+        CellSetAxis rowsAxis = null;
+        for (CellSetAxis axis : cs.getAxes()) {
+            if (axis.getAxisOrdinal().equals(Axis.ROWS)) {
+                rowsAxis = axis;
+                break;
+            }
+        }
+        if (rowsAxis == null
+                || rowIndex < 0
+                || rowIndex >= rowsAxis.getPositions().size()) {
+            throw new SaikuServiceException("Invalid row index for drill: " + rowIndex);
+        }
+        Position pos = rowsAxis.getPositions().get(rowIndex);
+        Member deepest = null;
+        for (Member m : pos.getMembers()) {
+            if (m == null || Level.Type.ALL.equals(m.getLevel().getLevelType())) {
+                continue;
+            }
+            if (deepest == null || m.getLevel().getDepth() > deepest.getLevel().getDepth()) {
+                deepest = m;
+            }
+        }
+        if (deepest == null) {
+            throw new SaikuServiceException("Cannot resolve a drillable member for row " + rowIndex);
+        }
+        return deepest;
+    }
+
     public ThinQuery drillacross(String queryName, List<Integer> cellPosition, Map<String, List<String>> levels) {
         try {
             ThinQuery old = context.get(queryName).getOlapQuery();
