@@ -1350,8 +1350,8 @@ public class AiQueryResource {
             }
             kAnonymityFilter.applyToCellDataSet(cds);
             org.saiku.service.olap.ai.PiiCaptionRedactor.redact(cds, schema);
-            String tileDigest = org.saiku.service.olap.ai.ask.CellsetDigestBuilder.digest(
-                    cds, MAX_NARRATIVE_ROWS_PER_TILE);
+            String tileDigest =
+                    org.saiku.service.olap.ai.ask.CellsetDigestBuilder.digest(cds, MAX_NARRATIVE_ROWS_PER_TILE);
             if (tileDigest.isBlank()) {
                 continue;
             }
@@ -1359,8 +1359,7 @@ public class AiQueryResource {
                 anchorRef = q.getCube();
             }
             nonEmptyTiles++;
-            combined
-                    .append("## ")
+            combined.append("## ")
                     .append(sanitizeTileTitle(tile.getTitle(), i))
                     .append("\n")
                     .append(tileDigest)

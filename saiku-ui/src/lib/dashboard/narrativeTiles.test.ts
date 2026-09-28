@@ -7,7 +7,12 @@ import type { SchemaLike } from '$lib/dashboard/effectiveQuery';
 import type { ActiveFilter } from '$lib/stores/activeFilters.svelte';
 import type { DashboardTile, CubeRef } from '$lib/api/dashboards';
 
-const CUBE: CubeRef = { connectionName: 'foodmart', catalog: 'FoodMart', schema: 'FoodMart', cubeName: 'Sales' };
+const CUBE: CubeRef = {
+	connectionName: 'foodmart',
+	catalog: 'FoodMart',
+	schema: 'FoodMart',
+	cubeName: 'Sales'
+};
 
 function sampleSchema(): SchemaLike {
 	return {
@@ -70,7 +75,9 @@ describe('resolveNarrativeTiles', () => {
 	});
 
 	test('skips a reference-query tile (caller has not resolved the .saiku file)', () => {
-		const referenceTile = chartTile({ query: { kind: 'reference', path: '/homes/admin/sales.saiku' } });
+		const referenceTile = chartTile({
+			query: { kind: 'reference', path: '/homes/admin/sales.saiku' }
+		});
 		const out = resolveNarrativeTiles([referenceTile], [], () => sampleSchema());
 		expect(out).toHaveLength(0);
 	});
@@ -80,7 +87,12 @@ describe('resolveNarrativeTiles', () => {
 			{
 				id: 'f1',
 				source: { kind: 'panel', filterId: 'w1' },
-				filter: { dimension: 'Time', hierarchy: 'Time', level: 'Year', members: ['[Time].[Time].[Year].&[1997]'] }
+				filter: {
+					dimension: 'Time',
+					hierarchy: 'Time',
+					level: 'Year',
+					members: ['[Time].[Time].[Year].&[1997]']
+				}
 			}
 		];
 		const out = resolveNarrativeTiles([chartTile()], filters, () => sampleSchema());

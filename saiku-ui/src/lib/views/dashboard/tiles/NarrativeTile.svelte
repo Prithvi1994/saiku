@@ -47,7 +47,9 @@
 	let abortController: AbortController | null = null;
 	let debounceHandle: ReturnType<typeof setTimeout> | null = null;
 
-	let safeHtml = $derived(narrative ? DOMPurify.sanitize(renderTinyMarkdown(narrative), SANITISE_CONFIG) : '');
+	let safeHtml = $derived(
+		narrative ? DOMPurify.sanitize(renderTinyMarkdown(narrative), SANITISE_CONFIG) : ''
+	);
 
 	async function generate() {
 		abortController?.abort();
@@ -59,7 +61,8 @@
 			const res = await narrateDashboard({ dashboardTitle, tiles }, controller.signal);
 			if (controller.signal.aborted) return;
 			if (res.degraded) {
-				error = res.reason ?? i18n.t('dashboard.narrative.degraded', 'Could not generate a narrative.');
+				error =
+					res.reason ?? i18n.t('dashboard.narrative.degraded', 'Could not generate a narrative.');
 				narrative = null;
 			} else {
 				narrative = res.narrative ?? '';

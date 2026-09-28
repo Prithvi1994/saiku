@@ -75,7 +75,10 @@ describe('narrateDashboard', () => {
 	});
 
 	test('returns a 429 rate-limit degrade envelope as-is (does not throw)', async () => {
-		mockJson(429, { degraded: true, reason: 'Too many AI narrative requests — limit is 5 per 60s.' });
+		mockJson(429, {
+			degraded: true,
+			reason: 'Too many AI narrative requests — limit is 5 per 60s.'
+		});
 
 		const out = await narrateDashboard(baseReq);
 
@@ -84,7 +87,10 @@ describe('narrateDashboard', () => {
 	});
 
 	test('returns a 503 not-configured degrade envelope as-is (does not throw)', async () => {
-		mockJson(503, { degraded: true, reason: 'AI ask is not configured. Set saiku.ai.ask.provider...' });
+		mockJson(503, {
+			degraded: true,
+			reason: 'AI ask is not configured. Set saiku.ai.ask.provider...'
+		});
 
 		const out = await narrateDashboard(baseReq);
 
@@ -103,7 +109,9 @@ describe('narrateDashboard', () => {
 	});
 
 	test('throws AiAskTransportError on a non-JSON body', async () => {
-		globalThis.fetch = vi.fn().mockResolvedValue(new Response('<html>oops</html>', { status: 500 }));
+		globalThis.fetch = vi
+			.fn()
+			.mockResolvedValue(new Response('<html>oops</html>', { status: 500 }));
 		await expect(narrateDashboard(baseReq)).rejects.toBeInstanceOf(AiAskTransportError);
 	});
 
@@ -119,7 +127,9 @@ describe('narrateDashboard', () => {
 	});
 
 	test('rethrows an AbortError UNWRAPPED (not an AiAskTransportError) so a cancel reads as a cancel', async () => {
-		globalThis.fetch = vi.fn().mockRejectedValue(Object.assign(new Error('aborted'), { name: 'AbortError' }));
+		globalThis.fetch = vi
+			.fn()
+			.mockRejectedValue(Object.assign(new Error('aborted'), { name: 'AbortError' }));
 		try {
 			await narrateDashboard(baseReq, new AbortController().signal);
 			expect.fail('should have thrown');
@@ -132,7 +142,9 @@ describe('narrateDashboard', () => {
 	test('posts to the narrate-dashboard endpoint with credentials + JSON + the request body', async () => {
 		const fetchMock = vi
 			.fn()
-			.mockResolvedValue(new Response(JSON.stringify({ degraded: false, narrative: 'x' }), { status: 200 }));
+			.mockResolvedValue(
+				new Response(JSON.stringify({ degraded: false, narrative: 'x' }), { status: 200 })
+			);
 		globalThis.fetch = fetchMock;
 
 		await narrateDashboard(baseReq);
@@ -150,7 +162,9 @@ describe('narrateDashboard', () => {
 	test('forwards an AbortSignal to fetch', async () => {
 		const fetchMock = vi
 			.fn()
-			.mockResolvedValue(new Response(JSON.stringify({ degraded: false, narrative: 'x' }), { status: 200 }));
+			.mockResolvedValue(
+				new Response(JSON.stringify({ degraded: false, narrative: 'x' }), { status: 200 })
+			);
 		globalThis.fetch = fetchMock;
 		const controller = new AbortController();
 
