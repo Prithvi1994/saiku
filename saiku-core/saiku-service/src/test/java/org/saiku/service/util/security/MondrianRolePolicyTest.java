@@ -133,6 +133,28 @@ public class MondrianRolePolicyTest {
                         .getAccess());
     }
 
+    /**
+     * Enforcement denies when a resolved role can't be applied (the schema doesn't declare it), so
+     * the preview must say DENIED too — for an admin as well. When the schema's roles are unknown
+     * (null), the preview can only report the mapping.
+     */
+    @Test
+    public void preview_lookupGrantToUndeclaredRole_isDenied() {
+        SaikuDatasource d = ds("true", "lookup", "ROLE_USER=Ghost");
+
+        assertEquals(
+                MondrianRolePolicy.Access.DENIED,
+                MondrianRolePolicy.preview(d, List.of("ROLE_USER"), List.of("Sales"), false)
+                        .getAccess());
+        assertEquals(
+                MondrianRolePolicy.Access.DENIED,
+                MondrianRolePolicy.preview(d, List.of("ROLE_USER"), List.of("Sales"), true)
+                        .getAccess());
+        assertEquals(
+                MondrianRolePolicy.Access.SCOPED,
+                MondrianRolePolicy.preview(d, List.of("ROLE_USER"), null, false).getAccess());
+    }
+
     @Test
     public void preview_nonRoleModes() {
         assertEquals(

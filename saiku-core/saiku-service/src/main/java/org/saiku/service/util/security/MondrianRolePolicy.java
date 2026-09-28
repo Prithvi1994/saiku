@@ -190,7 +190,7 @@ public final class MondrianRolePolicy {
      * Empty when nothing resolves (and always empty for modes that don't apply a Mondrian role).
      *
      * @param availableMondrianRoles the roles the datasource's schema declares; only consulted by
-     *     {@link Mode#ONE2ONE}
+     *     {@link Mode#ONE2ONE}. {@link #preview} also checks lookup grants against it.
      * @param mapping the parsed {@code security.mapping}; only consulted by {@link Mode#LOOKUP}
      */
     public static List<String> resolveMondrianRoles(
@@ -223,6 +223,11 @@ public final class MondrianRolePolicy {
      * Preview what a caller holding {@code springRoles} gets on a datasource, mirroring {@code
      * SecurityAwareConnectionManager.applySecurity} including its saiku#1968 fail-closed rule.
      *
+     * <p>A resolved role the schema doesn't declare can't be applied, and enforcement denies the
+     * connection (admin or not), so the preview reports {@link Access#DENIED}. When {@code
+     * availableMondrianRoles} is {@code null} the schema couldn't be read, and the mapping is
+     * reported as-is.
+     *
      * @param admin whether any of the caller's authorities is a configured admin role
      */
     public static Resolution preview(
@@ -242,6 +247,9 @@ public final class MondrianRolePolicy {
                 List<String> roles =
                         resolveMondrianRoles(mode, springRoles, availableMondrianRoles, mappingOf(datasource));
                 if (!roles.isEmpty()) {
+                    if (availableMondrianRoles != null && !availableMondrianRoles.containsAll(roles)) {
+                        return new Resolution(Access.DENIED, List.of());
+                    }
                     return new Resolution(Access.SCOPED, roles);
                 }
                 return new Resolution(admin ? Access.FULL_ADMIN : Access.DENIED, List.of());

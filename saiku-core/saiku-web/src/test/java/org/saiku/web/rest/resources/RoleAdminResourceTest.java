@@ -39,6 +39,7 @@ public class RoleAdminResourceTest {
     private final List<SaikuDatasource> saved = new ArrayList<>();
     private final List<SaikuUser> users = new ArrayList<>();
     private RoleAdminResource resource;
+    private volatile RuntimeException saveFailure;
 
     @Before
     public void setUp() {
@@ -81,6 +82,9 @@ public class RoleAdminResourceTest {
             @Override
             public void addDatasource(SaikuDatasource datasource, boolean overwrite, String[] roles) {
                 assertTrue("grant writes must overwrite the existing datasource", overwrite);
+                if (saveFailure != null) {
+                    throw saveFailure;
+                }
                 saved.add(datasource);
                 store.put(datasource.getName(), datasource);
             }
@@ -89,7 +93,8 @@ public class RoleAdminResourceTest {
         resource = new RoleAdminResource() {
             @Override
             protected List<String> availableMondrianRoles(SaikuDatasource ds) {
-                return ds.getName().equals("opends") ? null : SCHEMA_ROLES;
+                // opends: no schema read; brokends: a lookup datasource whose connection fails.
+                return ds.getName().equals("opends") || ds.getName().equals("brokends") ? null : SCHEMA_ROLES;
             }
         };
         resource.setUserService(us);
@@ -262,6 +267,60 @@ public class RoleAdminResourceTest {
         assertEquals(
                 404, resource.setGrants("ROLE_SALES", "nope", grants("Sales")).getStatus());
         assertTrue(saved.isEmpty());
+    }
+
+    /**
+     * If the schema's roles can't be read, a grant can't be checked against them. Saving it anyway
+     * let a typo through, and enforcement then couldn't apply the role (saiku#779 review).
+     */
+    @Test
+    public void setGrants_refusesWhenSchemaRolesCannotBeRead() {
+        store.put("brokends", ds("brokends", "lookup", "ROLE_SALES=Sales"));
+
+        Response r = resource.setGrants("ROLE_SALES", "brokends", grants("Sails"));
+
+        assertEquals(409, r.getStatus());
+        @SuppressWarnings("unchecked")
+        Map<String, Object> body = (Map<String, Object>) r.getEntity();
+        assertEquals("ROLES_UNVERIFIABLE", body.get("status"));
+        assertTrue(saved.isEmpty());
+    }
+
+    /** Revoking removes access, so it's always safe, even when the schema can't be read. */
+    @Test
+    public void revokeGrants_allowedWhenSchemaRolesCannotBeRead() {
+        store.put("brokends", ds("brokends", "lookup", "ROLE_SALES=Sales"));
+
+        assertEquals(200, resource.revokeGrants("ROLE_SALES", "brokends").getStatus());
+        assertFalse(saved.get(0).getProperties().containsKey("security.mapping"));
+    }
+
+    /** A failed save is logged server-side; the response carries no exception detail (saiku#1282). */
+    @Test
+    public void setGrants_saveFailure_doesNotLeakExceptionDetail() {
+        saveFailure = new IllegalStateException("/srv/saiku-home/repository/secret.sds is locked");
+
+        Response r = resource.setGrants("ROLE_SALES", "lookupds", grants("Sales"));
+
+        assertEquals(500, r.getStatus());
+        assertFalse(String.valueOf(r.getEntity()).contains("secret.sds"));
+    }
+
+    /** Preview must agree with enforcement: a grant to an undeclared role is denied, not scoped. */
+    @Test
+    public void preview_lookupGrantToUndeclaredRole_isDenied() {
+        store.put("lookupds", ds("lookupds", "lookup", "ROLE_SALES=Ghost"));
+
+        RoleAdminResource.PreviewRequest req = new RoleAdminResource.PreviewRequest();
+        req.roles = List.of("ROLE_SALES");
+        RoleAdminResource.PreviewDto out =
+                (RoleAdminResource.PreviewDto) resource.preview(req).getEntity();
+
+        RoleAdminResource.DatasourceAccessDto lookup = out.datasources.stream()
+                .filter(d -> d.datasource.equals("lookupds"))
+                .findFirst()
+                .orElseThrow();
+        assertEquals("DENIED", lookup.access);
     }
 
     // ---- helpers -------------------------------------------------------------------------------

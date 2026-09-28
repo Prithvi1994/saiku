@@ -17,7 +17,10 @@ Role security is configured per datasource, in its advanced properties:
 
 When a user's roles resolve to several Mondrian roles, Mondrian combines them into a union
 role. A non-admin whose roles resolve to **no** Mondrian role is refused (saiku#1968). An
-admin whose roles resolve to none runs as Mondrian root, with full access.
+admin whose roles resolve to none runs as Mondrian root, with full access. If a resolved role
+can't be applied because the schema doesn't declare it (a typo in `security.mapping`, or a role
+renamed in the schema), the connection is refused for everyone, admins included, rather than
+falling back to root.
 
 ## Admin API
 
@@ -27,7 +30,7 @@ All endpoints need `ROLE_ADMIN`, and all paths are relative to `/rest/saiku/admi
 |---|---|---|
 | `GET` | `/` | Inventory: every known Spring role, with its holders in the Saiku user store and its grants on each datasource, plus each datasource's security mode, the Mondrian roles its schema declares, and its mapping. |
 | `POST` | `/preview` | "Test as". The body is `{"username": "alice"}` or `{"roles": ["ROLE_SALES"]}`. For each datasource it returns the access outcome (`UNSECURED`, `SCOPED`, `FULL_ADMIN`, `DENIED`, `PASSTHROUGH`, `UNKNOWN`) and the Mondrian roles the request would run as. |
-| `PUT` | `/{springRole}/grants/{datasource}` | Replace the Spring role's Mondrian roles on a `lookup`-mode datasource. The body is `{"mondrianRoles": [...]}`, and an empty list revokes. It returns `409` if the datasource isn't in lookup mode, and `400` (listing `available`) for a Mondrian role the schema doesn't declare. |
+| `PUT` | `/{springRole}/grants/{datasource}` | Replace the Spring role's Mondrian roles on a `lookup`-mode datasource. The body is `{"mondrianRoles": [...]}`, and an empty list revokes. It returns `409` if the datasource isn't in lookup mode, `400` (listing `available`) for a Mondrian role the schema doesn't declare, and `409` `ROLES_UNVERIFIABLE` if the schema's roles can't be read to check the grant. Revoking needs no check. |
 | `DELETE` | `/{springRole}/grants/{datasource}` | Revoke all of the Spring role's grants on the datasource. |
 
 A grant change is written to the datasource's `.sds` file and takes effect on the next

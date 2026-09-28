@@ -177,7 +177,7 @@ public class RoleAdminResource {
         for (SaikuDatasource ds : datasources()) {
             MondrianRolePolicy.Mode mode = MondrianRolePolicy.modeOf(ds);
             List<String> available = null;
-            if (mode == MondrianRolePolicy.Mode.ONE2ONE) {
+            if (mode == MondrianRolePolicy.Mode.ONE2ONE || mode == MondrianRolePolicy.Mode.LOOKUP) {
                 available = availableMondrianRoles(ds);
             }
             MondrianRolePolicy.Resolution res = MondrianRolePolicy.preview(ds, roles, available, admin);
@@ -243,26 +243,39 @@ public class RoleAdminResource {
                     .build();
         }
         if (!mondrianRoles.isEmpty()) {
+            // Grants are only saved once checked against the schema. A role the schema doesn't
+            // declare can't be applied at connection time, so saving one would lock its users out.
+            // Revoking (an empty list) needs no check: removing access is always safe.
             List<String> available = availableMondrianRoles(ds);
-            if (available != null) {
-                List<String> unknown = new ArrayList<>();
-                for (String m : mondrianRoles) {
-                    if (!available.contains(m)) {
-                        unknown.add(m);
-                    }
+            if (available == null) {
+                return Response.status(Response.Status.CONFLICT)
+                        .entity(Map.of(
+                                "status",
+                                "ROLES_UNVERIFIABLE",
+                                "error",
+                                "could not read the Mondrian roles declared by datasource \"" + ds.getName()
+                                        + "\"'s schema, so the grant can't be checked; fix the connection "
+                                        + "and try again"))
+                        .type(MediaType.APPLICATION_JSON)
+                        .build();
+            }
+            List<String> unknown = new ArrayList<>();
+            for (String m : mondrianRoles) {
+                if (!available.contains(m)) {
+                    unknown.add(m);
                 }
-                if (!unknown.isEmpty()) {
-                    return Response.status(Response.Status.BAD_REQUEST)
-                            .entity(Map.of(
-                                    "status",
-                                    "VALIDATION_ERROR",
-                                    "error",
-                                    "the schema declares no Mondrian role named " + unknown,
-                                    "available",
-                                    available))
-                            .type(MediaType.APPLICATION_JSON)
-                            .build();
-                }
+            }
+            if (!unknown.isEmpty()) {
+                return Response.status(Response.Status.BAD_REQUEST)
+                        .entity(Map.of(
+                                "status",
+                                "VALIDATION_ERROR",
+                                "error",
+                                "the schema declares no Mondrian role named " + unknown,
+                                "available",
+                                available))
+                        .type(MediaType.APPLICATION_JSON)
+                        .build();
             }
         }
 
@@ -280,7 +293,7 @@ public class RoleAdminResource {
         } catch (Exception e) {
             log.error("saiku#779: could not save role grants on datasource {}", ds.getName(), e);
             return Response.serverError()
-                    .entity(Map.of("error", "could not save role grants: " + e.getMessage()))
+                    .entity(Map.of("error", "could not save role grants; see the server log"))
                     .type(MediaType.APPLICATION_JSON)
                     .build();
         }

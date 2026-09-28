@@ -250,6 +250,20 @@ public class SecurityAwareConnectionManager extends AbstractConnectionManager im
             if (setRole(con, roleName, datasource)) {
                 return con;
             }
+            if (roleName != null && con.getConnection() instanceof OlapConnection) {
+                // saiku#779: the role resolved but couldn't be applied — Mondrian rejects a role
+                // its schema doesn't declare (a mapping typo, or a role renamed in the schema).
+                // The connection still carries no role, i.e. Mondrian root, so deny rather than
+                // hand out full access. Applies to admins too: this is a misconfiguration.
+                String ds = datasource == null ? "?" : datasource.getName();
+                log.warn(
+                        "saiku#779: denying connection on datasource \"{}\" — resolved Mondrian role(s) "
+                                + "\"{}\" could not be applied (not declared in the schema?) (fail-closed).",
+                        ds,
+                        roleName);
+                throw new SaikuAccessDeniedException(
+                        "Access denied: your role on datasource \"" + ds + "\" is misconfigured.");
+            }
         }
 
         return con;
