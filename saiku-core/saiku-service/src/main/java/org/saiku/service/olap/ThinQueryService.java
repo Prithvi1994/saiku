@@ -27,6 +27,7 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -1233,14 +1234,15 @@ public class ThinQueryService implements Serializable {
         try {
             Cube cub = olapDiscoverService.getNativeCube(old.getCube());
             Query q = Fat.convert(old, cub);
+            // Fat.convert only rebuilds hierarchy placement and member selections from a
+            // ThinQuery's structured queryModel. The query this drill starts from is raw MDX
+            // (ThinQuery.Type.MDX, queryModel == null), so at this point every hierarchy in `q`
+            // — including the one we're about to drill into — is still parked on its internal
+            // "unused" pseudo-axis with nothing selected. Rehydrate every axis (not just ROWS:
+            // an empty COLUMNS/measures axis makes Mondrian reject the query with "Axis 0 is
+            // missing") from what the last cellset is actually showing before touching anything.
+            seedQueryFromCellSet(q, cs);
             QueryHierarchy qh = q.getHierarchy(target.getHierarchy());
-            // A freshly built Query starts every one of the cube's hierarchies parked on its
-            // internal "unused" axis; Fat.convert only moves one onto ROWS/COLUMNS/FILTER when
-            // the source ThinQuery has a structured queryModel to read the placement from. The
-            // query this drill starts from is raw MDX (ThinQuery.Type.MDX, queryModel == null),
-            // so `qh` is still unused here — every member/level we set on it below would be
-            // silently dropped from the generated MDX without this.
-            q.moveHierarchy(qh, Axis.ROWS);
             // With two active levels on the same hierarchy, the MDX generator's default
             // "consistent" mode wraps every other level in Exists(..., <this level's set>)
             // so they only keep members related to it. That's right for "expand a whole
@@ -1249,12 +1251,6 @@ public class ThinQueryService implements Serializable {
             // row. Disabling it keeps the levels independent: parent rows untouched, children
             // simply unioned in and nested under their parent by Hierarchize.
             qh.setConsistent(false);
-            // Fat.convert also never populates level content for a queryModel-less ThinQuery,
-            // so `qh` has zero active levels no matter what's actually on screen. Seed it from
-            // the rows the last cellset is really showing so adding the drilled member's
-            // children augments the current view instead of replacing it with just those
-            // children.
-            seedHierarchyFromCurrentRows(qh, cs, target.getHierarchy());
             for (SaikuMember child : children) {
                 qh.includeMember(child.getUniqueName());
             }
@@ -1292,15 +1288,12 @@ public class ThinQueryService implements Serializable {
         try {
             Cube cub = olapDiscoverService.getNativeCube(old.getCube());
             Query q = Fat.convert(old, cub);
+            // See the matching comment in drillDown: rehydrate every axis from the last
+            // cellset before editing anything, and keep any other still-expanded level on this
+            // hierarchy from being Exists()-narrowed against this member's (former) children.
+            seedQueryFromCellSet(q, cs);
             QueryHierarchy qh = q.getHierarchy(target.getHierarchy());
-            // See the matching comments in drillDown: a freshly built Query parks every
-            // hierarchy on its "unused" axis until something moves it onto ROWS, keep any
-            // other still-expanded level on this hierarchy from being Exists()-narrowed
-            // against this member's (former) children, and seed the rows Fat.convert didn't
-            // carry over, before editing inclusions below.
-            q.moveHierarchy(qh, Axis.ROWS);
             qh.setConsistent(false);
-            seedHierarchyFromCurrentRows(qh, cs, target.getHierarchy());
             for (SaikuMember child : children) {
                 qh.excludeMember(child.getUniqueName());
             }
@@ -1349,32 +1342,50 @@ public class ThinQueryService implements Serializable {
     }
 
     /**
-     * Includes every distinct, non-ALL member of {@code hierarchy} that the ROWS axis of
-     * {@code cs} is currently displaying. See the callers in drillDown/drillUp for why this is
-     * needed: {@link Fat#convert} leaves a freshly converted {@link QueryHierarchy} with zero
-     * active levels whenever the source query has no structured queryModel (raw-MDX queries,
-     * including the one this feature starts from), so without this the hierarchy's existing rows
-     * would be silently dropped rather than kept alongside the drilled member's children.
-     * {@code includeMember} is idempotent (it no-ops a member already in a level's inclusions),
-     * so re-seeding a queryModel-origin hierarchy that Fat.convert already populated is harmless.
+     * Rehydrates {@code q} (freshly returned by {@link Fat#convert}) from what the last executed
+     * cellset is actually showing, axis by axis.
+     *
+     * <p>A brand-new {@link Query} starts every one of the cube's hierarchies parked on an
+     * internal "unused" pseudo-axis, invisible to MDX generation. {@code Fat.convert} only moves
+     * a hierarchy onto ROWS/COLUMNS/FILTER and selects its members when the source ThinQuery
+     * carries a structured queryModel describing that placement — which a query executed
+     * straight from raw MDX (ThinQuery.Type.MDX, queryModel == null, e.g. the query this drill
+     * feature starts from) never has. Without this, every hierarchy drillDown/drillUp didn't
+     * explicitly touch — including the measures on COLUMNS — stays on "unused" and vanishes from
+     * the regenerated MDX entirely, which Mondrian then rejects for leaving a gap in the axis
+     * numbering.
+     *
+     * <p>{@code moveHierarchy}/{@code includeMember} are both no-ops when a hierarchy is already
+     * where it should be, so re-seeding a queryModel-origin query that {@code Fat.convert} already
+     * populated correctly is harmless.
      */
-    private void seedHierarchyFromCurrentRows(QueryHierarchy qh, CellSet cs, Hierarchy hierarchy) throws OlapException {
-        CellSetAxis rowsAxis = getAxis(cs, Axis.ROWS);
-        if (rowsAxis == null) {
-            return;
-        }
-        LinkedHashSet<String> uniqueNames = new LinkedHashSet<>();
-        for (Position pos : rowsAxis.getPositions()) {
-            for (Member m : pos.getMembers()) {
-                if (m != null
-                        && hierarchy.equals(m.getHierarchy())
-                        && !Level.Type.ALL.equals(m.getLevel().getLevelType())) {
-                    uniqueNames.add(m.getUniqueName());
+    private void seedQueryFromCellSet(Query q, CellSet cs) throws OlapException {
+        for (CellSetAxis csAxis : cs.getAxes()) {
+            Axis location = csAxis.getAxisOrdinal();
+            if (location == null) {
+                continue;
+            }
+            Map<Hierarchy, LinkedHashSet<String>> byHierarchy = new LinkedHashMap<>();
+            for (Position pos : csAxis.getPositions()) {
+                for (Member m : pos.getMembers()) {
+                    if (m == null || Level.Type.ALL.equals(m.getLevel().getLevelType())) {
+                        continue;
+                    }
+                    byHierarchy
+                            .computeIfAbsent(m.getHierarchy(), h -> new LinkedHashSet<>())
+                            .add(m.getUniqueName());
                 }
             }
-        }
-        for (String uniqueName : uniqueNames) {
-            qh.includeMember(uniqueName);
+            for (Map.Entry<Hierarchy, LinkedHashSet<String>> entry : byHierarchy.entrySet()) {
+                QueryHierarchy qh = q.getHierarchy(entry.getKey());
+                if (qh == null) {
+                    continue;
+                }
+                q.moveHierarchy(qh, location);
+                for (String uniqueName : entry.getValue()) {
+                    qh.includeMember(uniqueName);
+                }
+            }
         }
     }
 
