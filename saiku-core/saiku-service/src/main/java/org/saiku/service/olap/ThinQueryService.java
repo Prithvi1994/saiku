@@ -1360,31 +1360,44 @@ public class ThinQueryService implements Serializable {
      * populated correctly is harmless.
      */
     private void seedQueryFromCellSet(Query q, CellSet cs) throws OlapException {
+        // Assign each hierarchy to exactly one axis — whichever axis its members are found on
+        // first. A hierarchy should never legitimately span two axes of the same cellset, but
+        // olap4j's slicer/FILTER axis can carry a context tuple with non-ALL default members
+        // (e.g. the default measure) for hierarchies that are really seated elsewhere; grouping
+        // globally instead of per-axis keeps that from fighting the axis a hierarchy was already
+        // moved to, which QueryAxis#addHierarchy treats as an error rather than a no-op.
+        Map<Hierarchy, Axis> axisByHierarchy = new LinkedHashMap<>();
+        Map<Hierarchy, LinkedHashSet<String>> membersByHierarchy = new LinkedHashMap<>();
         for (CellSetAxis csAxis : cs.getAxes()) {
             Axis location = csAxis.getAxisOrdinal();
             if (location == null) {
                 continue;
             }
-            Map<Hierarchy, LinkedHashSet<String>> byHierarchy = new LinkedHashMap<>();
             for (Position pos : csAxis.getPositions()) {
                 for (Member m : pos.getMembers()) {
                     if (m == null || Level.Type.ALL.equals(m.getLevel().getLevelType())) {
                         continue;
                     }
-                    byHierarchy
-                            .computeIfAbsent(m.getHierarchy(), h -> new LinkedHashSet<>())
-                            .add(m.getUniqueName());
+                    Hierarchy hierarchy = m.getHierarchy();
+                    Axis assigned = axisByHierarchy.computeIfAbsent(hierarchy, h -> location);
+                    if (assigned.equals(location)) {
+                        membersByHierarchy
+                                .computeIfAbsent(hierarchy, h -> new LinkedHashSet<>())
+                                .add(m.getUniqueName());
+                    }
                 }
             }
-            for (Map.Entry<Hierarchy, LinkedHashSet<String>> entry : byHierarchy.entrySet()) {
-                QueryHierarchy qh = q.getHierarchy(entry.getKey());
-                if (qh == null) {
-                    continue;
-                }
-                q.moveHierarchy(qh, location);
-                for (String uniqueName : entry.getValue()) {
-                    qh.includeMember(uniqueName);
-                }
+        }
+        for (Map.Entry<Hierarchy, Axis> entry : axisByHierarchy.entrySet()) {
+            QueryHierarchy qh = q.getHierarchy(entry.getKey());
+            if (qh == null) {
+                continue;
+            }
+            if (qh.getAxis() == null || !entry.getValue().equals(qh.getAxis().getLocation())) {
+                q.moveHierarchy(qh, entry.getValue());
+            }
+            for (String uniqueName : membersByHierarchy.getOrDefault(entry.getKey(), new LinkedHashSet<>())) {
+                qh.includeMember(uniqueName);
             }
         }
     }
