@@ -698,8 +698,8 @@ public class ThinQueryService implements Serializable {
         }
         for (ThinNamedSet existing : qm.getNamedSets()) {
             if (name.equals(existing.getName())) {
-                throw new IllegalArgumentException("Duplicate named-set name '" + name
-                        + "'. Each named set on a query must use a unique name.");
+                throw new IllegalArgumentException(
+                        "Duplicate named-set name '" + name + "'. Each named set on a query must use a unique name.");
             }
         }
         qm.getNamedSets().add(namedSet);
