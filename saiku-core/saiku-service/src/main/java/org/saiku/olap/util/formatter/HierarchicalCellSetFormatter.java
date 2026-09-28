@@ -126,7 +126,8 @@ public class HierarchicalCellSetFormatter extends AbstractCellSetFormatter {
                     // saiku#827: surface olap4j member-level properties (custom
                     // hierarchy properties, description, member key, caption, ...)
                     // the same way saiku#773/PR #821 did for cell properties.
-                    for (Map.Entry<String, String> e : MemberPropertyExtractor.extract(member).entrySet()) {
+                    for (Map.Entry<String, String> e :
+                            MemberPropertyExtractor.extract(member).entrySet()) {
                         memberInfo.setProperty(e.getKey(), e.getValue());
                     }
                     //					try {

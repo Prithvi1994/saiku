@@ -16,6 +16,7 @@ import java.util.HashMap;
 import java.util.Map;
 import org.junit.Test;
 import org.olap4j.OlapException;
+import org.olap4j.impl.Named;
 import org.olap4j.impl.NamedListImpl;
 import org.olap4j.metadata.Member;
 import org.olap4j.metadata.NamedList;
@@ -68,13 +69,11 @@ public class MemberPropertyExtractorTest {
         values.put(visible, Boolean.TRUE);
         values.put(currencyCode, "USD");
 
-        Member member =
-                stubMember(namedList(uniqueName, hierarchyUniqueName, visible, currencyCode), values);
+        Member member = stubMember(namedList(uniqueName, hierarchyUniqueName, visible, currencyCode), values);
         Map<String, String> out = MemberPropertyExtractor.extract(member);
 
         assertFalse("MEMBER_UNIQUE_NAME already on MemberCell.uniqueName", out.containsKey("MEMBER_UNIQUE_NAME"));
-        assertFalse(
-                "HIERARCHY_UNIQUE_NAME already on MemberCell.hierarchy", out.containsKey("HIERARCHY_UNIQUE_NAME"));
+        assertFalse("HIERARCHY_UNIQUE_NAME already on MemberCell.hierarchy", out.containsKey("HIERARCHY_UNIQUE_NAME"));
         assertFalse("$visible is a bookkeeping flag, not member metadata", out.containsKey("$visible"));
         assertEquals("USD", out.get("Currency Code"));
         assertEquals(1, out.size());
@@ -141,23 +140,38 @@ public class MemberPropertyExtractorTest {
 
     /* ------------------------ test helpers ------------------------ */
 
+    /**
+     * {@link NamedListImpl} requires its elements to implement {@link Named}, but olap4j's
+     * {@link Property} interface doesn't — {@code property()} below proxies both so its stubs
+     * satisfy that bound.
+     */
+    private interface NamedProperty extends Property, Named {}
+
     private static NamedList<Property> namedList(Property... properties) {
-        NamedList<Property> nl = new NamedListImpl<>();
+        NamedList<NamedProperty> nl = new NamedListImpl<>();
         for (Property p : properties) {
-            nl.add(p);
+            nl.add((NamedProperty) p);
         }
-        return nl;
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        NamedList<Property> result = (NamedList) nl;
+        return result;
     }
 
     private static Property property(String name) {
         return (Property) Proxy.newProxyInstance(
                 MemberPropertyExtractorTest.class.getClassLoader(),
-                new Class<?>[] {Property.class},
+                new Class<?>[] {NamedProperty.class},
                 new InvocationHandler() {
                     @Override
                     public Object invoke(Object proxy, Method method, Object[] args) {
+                        // Proxy instances don't inherit Object's defaults — every method,
+                        // including hashCode/equals, is routed through invoke(). The tests use
+                        // these as HashMap keys (identity semantics), so both must be handled
+                        // explicitly or hashCode()'s unboxing of a null return NPEs.
                         if ("getName".equals(method.getName())) return name;
                         if ("toString".equals(method.getName())) return name;
+                        if ("hashCode".equals(method.getName())) return System.identityHashCode(proxy);
+                        if ("equals".equals(method.getName())) return proxy == args[0];
                         return null;
                     }
                 });
