@@ -20,6 +20,7 @@ import jakarta.servlet.ServletConfig;
 import jakarta.servlet.ServletContext;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.io.InputStream;
 import java.sql.SQLException;
@@ -32,6 +33,7 @@ import mondrian.xmla.XmlaHandler.ConnectionFactory;
 import mondrian.xmla.XmlaHandler.Request;
 import mondrian.xmla.XmlaHandler.XmlaExtra;
 import mondrian.xmla.XmlaRequest;
+import mondrian.xmla.XmlaServlet;
 import mondrian.xmla.XmlaUtil;
 import mondrian.xmla.impl.Olap4jXmlaServlet;
 import org.olap4j.OlapConnection;
@@ -40,6 +42,7 @@ import org.olap4j.impl.Olap4jUtil;
 import org.olap4j.metadata.Database;
 import org.saiku.datasources.connection.IConnectionManager;
 import org.saiku.olap.util.exception.SaikuOlapException;
+import org.saiku.service.util.exception.SaikuAccessDeniedException;
 import org.saiku.service.util.xml.SecureXml;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -75,6 +78,68 @@ public class SaikuXmlaServlet extends Olap4jXmlaServlet {
     // SOAP envelope namespace, mirrored from mondrian.xmla.XmlaConstants (not re-exported
     // as a public constant we can reference here).
     private static final String NS_SOAP_ENV_1_1 = "http://schemas.xmlsoap.org/soap/envelope/";
+
+    /** saiku#1973 — fault code for an authenticated-but-unauthorised datasource request. */
+    private static final String ACCESS_DENIED_CODE = "00USMD01";
+
+    /**
+     * saiku#1973 (CWE-863) — render an access-denied as a CLEAN {@code Client} fault.
+     *
+     * <p>A {@link SaikuAccessDeniedException} (saiku#1968 fail-closed denial — the caller's roles
+     * resolve to no Mondrian role on the datasource they named, and they are not an admin) is the
+     * client's problem, not a server fault. Unfixed, it reached {@code
+     * DefaultXmlaServlet.handleFault} as a raw {@code RuntimeException}, which the fork renders as a
+     * {@code Server}-class fault whose {@code desc} is {@code getMessage()} — i.e. the denial text,
+     * datasource name and all, was echoed back inside {@code SOAP-ENV:Fault/detail/XA:error/desc},
+     * and a {@code Server} fault tells an XMLA client (and every client-side retry/transient-error
+     * policy built on it) that the failure is worth retrying against a healthy server.
+     *
+     * <p>This override re-labels the denial as a {@code Client}-class fault with a fixed,
+     * information-free description before delegating to the parent renderer, so the whole SOAP
+     * envelope (faultcode, faultstring, detail, code) is produced by the unchanged upstream code
+     * path. The original denial message is logged server-side and never leaves the JVM.
+     *
+     * <p>Only denials are rewritten; every other fault — including other {@code RuntimeException}s —
+     * renders exactly as before.
+     */
+    @Override
+    protected void handleFault(
+            HttpServletResponse response, byte[][] requestSoapParts, XmlaServlet.Phase phase, Throwable exception) {
+        SaikuAccessDeniedException denied = findAccessDenied(exception);
+        if (denied == null) {
+            super.handleFault(response, requestSoapParts, phase, exception);
+            return;
+        }
+        log.warn("XMLA access denied on datasource [detail={}]", denied.getMessage());
+        // The CAUSE is a sanitised copy on purpose: {@code XmlaException.getDetail()} — which is
+        // what the renderer writes into XA:error/desc — is the ROOT CAUSE's message, so handing it
+        // the original denial would put the datasource name straight back on the wire. (A null
+        // cause is not an option either: getDetail() then walks a null chain and the whole fault
+        // render dies into the upstream catch-all.)
+        super.handleFault(
+                response,
+                requestSoapParts,
+                phase,
+                new XmlaException(
+                        "Client",
+                        ACCESS_DENIED_CODE,
+                        "Access denied",
+                        new SaikuAccessDeniedException("Access denied")));
+    }
+
+    /**
+     * Walk the cause chain for a {@link SaikuAccessDeniedException}. By exception TYPE, never by
+     * message text. The walk is needed because the denial can be rewrapped on its way out of the
+     * connection factory before the fault is rendered.
+     */
+    private static SaikuAccessDeniedException findAccessDenied(Throwable t) {
+        for (Throwable c = t; c != null; c = c.getCause() == c ? null : c.getCause()) {
+            if (c instanceof SaikuAccessDeniedException denied) {
+                return denied;
+            }
+        }
+        return null;
+    }
 
     /**
      * XXE fix (saiku#1905, CWE-611). The fork's {@code DefaultXmlaServlet.unmarshallSoapMessage}
