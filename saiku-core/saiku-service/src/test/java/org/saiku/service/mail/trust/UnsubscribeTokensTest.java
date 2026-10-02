@@ -146,14 +146,17 @@ class UnsubscribeTokensTest {
     }
 
     @Test
-    void aTokenMintedLaterDoesNotVerifyAgainstAnEarlierSlot() {
+    void tokensWithDifferentMintTimesProduceDifferentStrings() {
+        // Two tokens for the same address minted 1 s apart have different expiries and therefore
+        // different HMACs — they are distinct strings.  Both remain valid until their respective
+        // expiry (continuous TTL, not slot-bound), so verify() still accepts each within its window.
         UnsubscribeTokens t = tokensAt(30, NOW_MS);
         String early = t.tokenFor("alice@example.com", NOW_MS);
         String later = t.tokenFor("alice@example.com", NOW_MS + 1_000L);
-        // The expiry differs, so the two signatures differ; neither is accepted for the other.
         assertNotEquals(early, later);
-        assertFalse(t.verify("alice@example.com", early, NOW_MS + 1_000L));
-        assertFalse(t.verify("alice@example.com", later, NOW_MS));
+        // Both tokens are unexpired and have correct HMACs — each verifies at the other's mint time.
+        assertTrue(t.verify("alice@example.com", early, NOW_MS + 1_000L));
+        assertTrue(t.verify("alice@example.com", later, NOW_MS));
     }
 
     @Test
