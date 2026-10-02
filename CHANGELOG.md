@@ -21,6 +21,29 @@ All notable changes to Saiku are documented here. This project follows
   reachability probe — never the API key — so an operator can confirm the
   wiring without running a query. (saiku#904)
 
+### Fixed
+
+- **XMLA: Excel / MSOLAP could not connect at all after the #1905 auth gate.**
+  `/xmla` was moved behind a dedicated stateless secured chain, which is the
+  right call, but it inherited the SPA's `HttpStatusEntryPoint(401)` entry
+  point — the one added in #878 so the browser would not pop a native auth
+  dialog over the SPA's routine XHR 401s. That entry point emits **no**
+  `WWW-Authenticate` header, and challenge-driven clients only ever send
+  credentials *in response to* a challenge: Excel/MSOLAP over WinHTTP (the
+  endpoint's `web.xml` mapping literally ships `Source=Excel`) sends an
+  anonymous request, waits for `401 WWW-Authenticate: Basic`, then retries with
+  credentials. With the header suppressed they never got past step one.
+  Pre-emptive-Basic clients (olap4j with credentials in the connect string,
+  `curl -u`, most Python/Java XMLA libraries) were unaffected, which is why the
+  breakage was invisible to them. `/xmla/**` now uses its own
+  `BasicAuthenticationEntryPoint` (`realm="Saiku XMLA"`) so challenge-driven
+  clients can negotiate, while the SPA chain keeps its bare-401 entry point —
+  the two chains pick per surface, because sharing one entry point would
+  either resurrect the browser dialog or strip the challenge back off XMLA.
+  Auth policy is unchanged: still `isFullyAuthenticated()`, still CSRF-off,
+  still the shared per-IP login rate limiter, still stateless. Only the 401's
+  headers differ. (saiku#1950)
+
 ### Security
 
 - **The SPA ships a default CSP and `frame-ancestors` (CWE-693 / CWE-1021,
