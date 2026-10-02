@@ -32,6 +32,7 @@ import org.saiku.olap.util.exception.SaikuOlapException;
 import org.saiku.service.ISessionService;
 import org.saiku.service.user.UserService;
 import org.saiku.service.util.exception.SaikuAccessDeniedException;
+import org.saiku.service.util.security.Usernames;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
@@ -46,6 +47,42 @@ public class SecurityAwareConnectionManager extends AbstractConnectionManager im
      * serialisation UID
      */
     private static final long serialVersionUID = -5912836681963684201L;
+
+    /**
+     * saiku#1970 (CWE-178) — the field separator used by {@link #connectionCacheKey(String, String)}.
+     *
+     * <p>ASCII UNIT SEPARATOR (U+001F): a C0 control character that is not a legal character in a
+     * datasource name or in a login, so it cannot occur inside either field of the key.
+     */
+    static final String KEY_FIELD_SEPARATOR = "\u001F";
+
+    /**
+     * saiku#1970 (CWE-178) — an <b>injective</b> composite key for a security-enabled datasource's
+     * cached connection: it pairs the datasource {@code name} with the caller's identity so the two
+     * fields can never be mistaken for one another.
+     *
+     * <p>The historical key was {@code name + "-" + identity}. Both fields are admin-chosen and share
+     * one flat namespace, so a literal {@code "-"} lets two genuinely different (datasource, user)
+     * pairs collapse onto the same key: datasource {@code foo} + user {@code bar-x} and datasource
+     * {@code foo-bar} + user {@code x} both produced {@code "foo-bar-x"}, and the second caller was
+     * handed a live connection built for the <em>other</em> datasource — with the other datasource's
+     * role already applied.
+     *
+     * <p>Rather than guess which characters are impossible in an admin-chosen name, the encoding is
+     * <b>length-prefixed</b>: {@code <len(name)> ":" <name> <SEP> <identity>}. The length prefix
+     * alone makes the mapping injective for <em>arbitrary</em> strings — the name's boundary is fixed
+     * before the identity is read, so no byte of either field can shift it and no choice of
+     * name/username can forge another pair's key. The separator is kept purely for legibility; the
+     * key still reads as {@code 8:foodmart<U+001F>bob} in a log line or a debugger.
+     *
+     * <p>Null-safe: a null field is treated as the empty string, so {@code (null, "x")} and
+     * {@code ("", "x")} share a key rather than one of them producing {@code "null:x"}.
+     */
+    static String connectionCacheKey(String name, String identity) {
+        String ds = (name == null) ? "" : name;
+        String user = (identity == null) ? "" : identity;
+        return ds.length() + ":" + ds + KEY_FIELD_SEPARATOR + user;
+    }
 
     private transient Map<String, ISaikuConnection> connections = new HashMap<>();
 
@@ -165,11 +202,17 @@ public class SecurityAwareConnectionManager extends AbstractConnectionManager im
             Map<String, Object> session = sessionService.getAllSessionObjects();
             String username = session == null ? null : (String) session.get("username");
             if (username != null) {
-                return name + "-" + username;
+                return connectionCacheKey(name, Usernames.canonicalize(username));
             }
+            // saiku#1970: the session "username" is the #1907-canonical (lower-cased) identity, so
+            // the principal fallback is canonicalised the same way — otherwise the SAME user
+            // reaching the SAME datasource via XMLA ("JSmith") and via the UI ("jsmith") got two
+            // separate cached connections. Cosmetic (both slots are scoped to that user's own
+            // authorities, so neither can carry another user's role), but the duplicates are
+            // avoidable and the canonical form is the single identity Saiku compares on elsewhere.
             String principal = currentPrincipalName();
             if (principal != null) {
-                return name + "-" + principal;
+                return connectionCacheKey(name, Usernames.canonicalize(principal));
             }
         }
         return name;
