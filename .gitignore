@@ -473,9 +473,10 @@ nbdist/
 !/lib/repo/**
 
 # Claude Code session worktrees / scratch (never commit) — except the shared,
-# reviewed agent assets: project skills, the corrections log and the session
-# summary (see AGENTS.md).
+# reviewed agent assets: the project permission policy, project skills, the
+# corrections log and the session summary (see AGENTS.md).
 .claude/*
+!.claude/settings.json
 !.claude/skills/
 !.claude/memory/
 !.claude/session-summary.md
