@@ -422,7 +422,7 @@ public class RepositoryDatasourceManagerTest {
     }
 
     @Test
-    public void testAddDatasourceRejectsCsvPathEscapingDatadir() {
+    public void testAddDatasourceRejectsCsvPathEscapingDatadir() throws Exception {
         // A `..` segment that normalises outside the datadir must be refused outright rather
         // than interpolated into the model JSON as an out-of-root read target.
         try {
