@@ -950,7 +950,7 @@ public class AiAskService {
      * Extracted so {@link #askChained} and {@link #buildDashboard} share identical paced-retry
      * behaviour rather than duplicating the loop.
      */
-    private NlAskResponse askWithPacedRetry(NlAskRequest req) {
+    private PaskedResponse askWithPacedRetry(NlAskRequest req) {
         NlAskResponse resp = provider.ask(req);
         int rlRetries = 0;
         int calls = 1;
