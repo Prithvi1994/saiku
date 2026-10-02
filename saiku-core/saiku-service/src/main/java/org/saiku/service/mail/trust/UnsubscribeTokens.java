@@ -118,7 +118,8 @@ public final class UnsubscribeTokens {
         }
         long expiry = expiryFor(nowMillis);
         byte[] mac = hmac(signedMaterial(normalised, expiry));
-        return expiry + "" + DOT + java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(mac);
+        return expiry + "" + DOT
+                + java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(mac);
     }
 
     /** Absolute expiry (epoch seconds) a token minted at {@code nowMillis} carries. */

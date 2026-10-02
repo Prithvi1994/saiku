@@ -26,8 +26,10 @@ class UnsubscribeTokensTest {
 
     /** Pinned clock + TTL, so the expiry written into a token is reproducible. */
     private static UnsubscribeTokens tokensAt(long ttlDays, long fixedNowMillis) {
-        return new UnsubscribeTokens(KEY, ttlDays, java.time.Clock.fixed(
-                java.time.Instant.ofEpochMilli(fixedNowMillis), java.time.ZoneOffset.UTC));
+        return new UnsubscribeTokens(
+                KEY,
+                ttlDays,
+                java.time.Clock.fixed(java.time.Instant.ofEpochMilli(fixedNowMillis), java.time.ZoneOffset.UTC));
     }
 
     /** A fixed instant so TTL arithmetic is readable in the assertions above. */
