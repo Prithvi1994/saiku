@@ -156,6 +156,11 @@ of [`ROADMAP.md`](./ROADMAP.md).
 
 ## PR review
 
+Reviewers (human and agent) work from
+[`docs/review-rubric.md`](./docs/review-rubric.md) — the shared axes, severity
+labels and report shape. `.github/prompts/review.md` runs the same rubric in any
+agent. The process below still governs who reviews what.
+
 - One maintainer approval + green CI is enough to merge routine
   changes.
 - Substantive changes (breaking APIs, licensing implications,
