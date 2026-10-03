@@ -255,14 +255,14 @@ public class SaikuXmlaServlet extends Olap4jXmlaServlet {
                         for (Map.Entry<String, OlapConnection> entry :
                                 connections.getAllOlapConnections().entrySet()) {
                             if (entry.getKey().toLowerCase().equals(s.toLowerCase())) {
-                                return entry.getValue();
+                                return borrow(entry.getValue());
                             }
                         }
-                        return connections.getOlapConnection(s);
+                        return borrow(connections.getOlapConnection(s));
                     } else {
                         for (Map.Entry<String, OlapConnection> entry :
                                 connections.getAllOlapConnections().entrySet()) {
-                            return entry.getValue();
+                            return borrow(entry.getValue());
                         }
                     }
 
@@ -270,6 +270,21 @@ public class SaikuXmlaServlet extends Olap4jXmlaServlet {
                     log.error("XMLA discover failed", e);
                 }
                 return null;
+            }
+
+            /**
+             * saiku#1969: hand the XMLA handler a BORROWED view of the cached connection.
+             *
+             * <p>The connection comes from {@link IConnectionManager}, which caches and shares it
+             * with every other caller resolving to the same cache key — and the XMLA fork closes the
+             * connection it is given on the way out of every query, success or failure. Wrapping it
+             * in {@link NonClosingOlapConnection} keeps that {@code close()} a no-op, so a bad MDX
+             * over {@code /xmla} can no longer take the shared connection down for the REST path and
+             * for other XMLA callers. Identity is also broken here, which is the point: the handler
+             * must never hold the object the cache owns.
+             */
+            private OlapConnection borrow(OlapConnection cached) {
+                return cached == null ? null : new NonClosingOlapConnection(cached);
             }
 
             public Map<String, Object> getPreConfiguredDiscoverDatasourcesResponse() {

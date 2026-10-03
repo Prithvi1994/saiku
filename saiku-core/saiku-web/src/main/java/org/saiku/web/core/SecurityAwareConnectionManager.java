@@ -135,6 +135,16 @@ public class SecurityAwareConnectionManager extends AbstractConnectionManager im
 
         String newName = resolveConnectionKey(name, datasource);
 
+        // saiku#1969: the cache OWNS these connections. Anything that closes one behind the cache's
+        // back (the XMLA fork's unconditional close() on a shared connection is the historical
+        // case) leaves a closed instance in the map that every later caller would be handed, with
+        // no health check in between — so subsequent queries on that datasource fail until an admin
+        // refresh. Evict a closed OLAP connection and rebuild it instead of serving it.
+        if (connections.containsKey(newName) && isClosedOlapConnection(connections.get(newName))) {
+            log.warn("saiku#1969: cached OLAP connection \"{}\" is closed — evicting and reconnecting", newName);
+            connections.remove(newName);
+        }
+
         if (!connections.containsKey(newName)) {
             con = connect(name, datasource);
             if (con != null) {
@@ -168,6 +178,31 @@ public class SecurityAwareConnectionManager extends AbstractConnectionManager im
             log.error("Error refreshing connection: " + name, e);
         }
         return null;
+    }
+
+    /**
+     * Whether a cached connection wraps an {@link OlapConnection} that has been closed underneath
+     * the cache (saiku#1969).
+     *
+     * <p>Only OLAP connections are health-checked: a non-OLAP (JDBC/legacy) connection's lifecycle
+     * is not what this issue is about, and an unrecognised connection type is treated as usable
+     * rather than silently rebuilt. A health check that itself fails is also treated as "can't
+     * prove it's dead" — we hand it out and let the caller fail, exactly as before this change.
+     *
+     * <p>Package-private so the reversion guard can assert the check directly.
+     */
+    boolean isClosedOlapConnection(ISaikuConnection con) {
+        if (con == null) {
+            return false;
+        }
+        try {
+            if (con.getConnection() instanceof OlapConnection) {
+                return ((OlapConnection) con.getConnection()).isClosed();
+            }
+        } catch (Exception e) {
+            log.debug("Could not determine closed state of cached connection {}", con.getName(), e);
+        }
+        return false;
     }
 
     /**
@@ -500,7 +535,12 @@ public class SecurityAwareConnectionManager extends AbstractConnectionManager im
         return result;
     }
 
-    private ISaikuConnection connect(String name, SaikuDatasource datasource) {
+    /**
+     * Opens a brand-new connection for {@code datasource}. Protected as a test seam: the
+     * connection cache's behaviour is asserted by injecting fakes here rather than by standing up a
+     * real warehouse.
+     */
+    protected ISaikuConnection connect(String name, SaikuDatasource datasource) {
         try {
             ISaikuConnection con = SaikuConnectionFactory.getConnection(datasource);
             if (con.initialized()) {
