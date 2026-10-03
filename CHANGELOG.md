@@ -187,6 +187,18 @@ Two changes are visible behaviour changes for API clients — see **Breaking**.
   takeover plus owner lockout. Colons, a `home:` prefix, and blank input also
   slipped through. (saiku#1906, saiku#1907, saiku#1934)
 - **Datasource names can no longer traverse paths.** (saiku#1906)
+- **The CSV-datasource Calcite model JSON is now escaped and
+  path-contained.** (saiku#1932) `getCSVJson` interpolated the datasource name
+  and a `location`-derived path into a hand-built model string with no
+  escaping — a `'` closed the quoted operand and the remainder was read as
+  further model keys — and the path was concatenated onto the datadir with no
+  containment check, so a `..` segment pointed the CSV read outside the repo
+  root. Both values are JSON-escaped now, and the path is resolved through the
+  same `resolveWithinDatadir` containment rule the rest of the repository write
+  layer uses (a path that normalises outside the datadir is rejected). The
+  branch is dormant in the shipped build — `JdbcUrlPolicy` (saiku#1902) denies
+  the `calcite` scheme — but it is now safe at the source rather than by
+  reliance on an upstream validator.
 
 ### Breaking
 
