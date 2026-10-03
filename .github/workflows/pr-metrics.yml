@@ -42,10 +42,15 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: '20'
+          node-version: '24'
 
       - name: Unit-test the metric script
-        run: node --test 'scripts/*.test.mjs'
+        run: |
+          if compgen -G 'scripts/*.test.mjs' > /dev/null 2>&1; then
+            node --test 'scripts/*.test.mjs'
+          else
+            echo 'No test files found in checkout — skipping unit tests (branch pre-dates scripts/)'
+          fi
 
       # `gh pr list --json` is the supported shape; the script tolerates both a
       # bare array and a {pullRequests:[...]} wrapper.

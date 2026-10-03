@@ -144,7 +144,7 @@ jobs:
     name: ui (svelte-check + vitest + build + e2e)
     needs: changes
     if: needs.changes.outputs.ui == 'true' || github.event_name == 'push'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: saiku-ui
