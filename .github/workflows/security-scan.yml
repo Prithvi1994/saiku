@@ -54,7 +54,7 @@ jobs:
       pull-requests: write # required to annotate the PR with the findings
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/dependency-review-action@400a0a0f01eb2f76f7746f2b0c6e5ff7b475c699 # v4.4.0
+      - uses: actions/dependency-review-action@4081bf99e2866ebe428fc0477b69eb4fcda7220a # v4.4.0
         with:
           fail-on-severity: high
           comment-summary-in-pr: on-failure
@@ -67,7 +67,7 @@ jobs:
         with:
           # Full history — gitleaks can only find a secret in commits it can see.
           fetch-depth: 0
-      - uses: gitleaks/gitleaks-action@b60ff595ee81273e17d6559c24fb5d347e393f19 # v2.4.0
+      - uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2.3.9
         env:
           # Never let the scanner print a detected secret into the job log.
           GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"
