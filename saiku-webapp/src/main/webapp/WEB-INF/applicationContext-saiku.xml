@@ -52,11 +52,23 @@
          forged request to ride (the main chain likewise never CSRF-checks /xmla —
          SaikuCsrfRequestMatcher only guards /rest/**). basicAuth401NoChallenge returns
          a bare 401 (no WWW-Authenticate) so anonymous clients get 401, not a browser
-         auth-dialog challenge.
+         auth-dialog challenge — that reasoning is correct for the SPA but WRONG for XMLA,
+         see saiku#1950 below.
 
          create-session="stateless": XMLA clients authenticate per-request with HTTP
          Basic and carry no cookie, so this chain never persists a SecurityContext and
          never mints a Jetty FileSessionDataStore session file per request.
+
+         saiku#1950: entry-point-ref is xmlaBasicAuthChallenge, NOT basicAuth401NoChallenge.
+         The /xmla chain gets a REAL `WWW-Authenticate: Basic realm="Saiku XMLA"` challenge so
+         challenge-driven clients (Excel/MSOLAP over WinHTTP) can negotiate; the main SPA chain
+         below deliberately keeps the bare-401 no-challenge entry point (saiku#878) so the
+         browser never pops a native auth dialog over the SPA's XHR 401s. One shared entry point
+         would trade one client-compat problem for the other, so the two chains pick per surface.
+         Auth policy itself is UNCHANGED by this: still isFullyAuthenticated(), still CSRF-off,
+         still the shared per-IP loginRateLimitFilter, still stateless. Only the 401's headers
+         differ. Locked by XmlaAuthIT#anonymousPostToXmlaAdvertisesBasicChallenge and its
+         counterweight #spaChainStillOmitsBasicChallenge.
 
          loginRateLimitFilter (BEFORE BASIC_AUTH_FILTER): the SAME per-IP brute-force
          lockout the main chain uses — without it, /xmla would be an un-throttled
@@ -64,10 +76,10 @@
          to /xmla). The shared loginRateLimiter bean returns a 429 short-circuit once
          the IP exceeds the failure budget, before the AuthenticationProvider runs. -->
     <security:http pattern="/xmla/**" request-matcher="ant" use-expressions="true"
-                   create-session="stateless" entry-point-ref="basicAuth401NoChallenge">
+                   create-session="stateless" entry-point-ref="xmlaBasicAuthChallenge">
       <security:csrf disabled="true"/>
       <security:intercept-url pattern="/**" access="isFullyAuthenticated()" />
-      <security:http-basic entry-point-ref="basicAuth401NoChallenge"/>
+      <security:http-basic entry-point-ref="xmlaBasicAuthChallenge"/>
       <security:custom-filter ref="loginRateLimitFilter" before="BASIC_AUTH_FILTER"/>
       <security:anonymous/>
     </security:http>
