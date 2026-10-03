@@ -1287,6 +1287,49 @@
         <constructor-arg ref="mailLinkBuilder"/>
     </bean>
 
+    <!-- ====================================================================
+         #1810: headless dashboard snapshot renderer (PDF/PNG) — WIRED, NOT
+         YET CONSUMED.
+
+         A dashboard renders server-side with no browser attached: PDF via
+         OpenPDF, PNG via headless AWT. The unit of work is a SIGNED,
+         SELF-ORIGIN reference (dashboardPath + panels + owner + expiry, HMAC'd
+         under a key derived from the per-install key) — never a URL. There is
+         no field in which a caller could name a fetch target, the dashboard is
+         resolved locally, and the renderer issues NO outbound request, so there
+         is nothing to redirect off-origin. Verification happens BEFORE any
+         measure is read, and the signed owner must equal the caller's
+         authenticated name.
+
+         Renders run on the bounded pool below under a wall-clock timeout with a
+         panel cap and an output byte cap, all fail-closed, so a pathological
+         dashboard is abandoned rather than wedging a scheduler thread.
+
+         This bean is the dependency #943 (PDF subscriptions) and #1099 (PNG
+         digests) will consume; the DASHBOARD_DIGEST handler above remains the
+         lean link-based version and does NOT call it yet.
+         ==================================================================== -->
+    <bean id="snapshotReferenceSigner" class="org.saiku.service.snapshot.SnapshotReferenceSigner"/>
+
+    <!-- The renderer owns its own small, fixed, bounded render pool (the same shape JobScheduler uses)
+         rather than borrowing a Spring one: a render is a short CPU-bound job, and the service needs a
+         non-queueing rejection policy to fail cleanly under load. destroy-method="shutdown" interrupts
+         in-flight renders on context close. -->
+    <bean id="snapshotRenderService" class="org.saiku.service.snapshot.SnapshotRenderService"
+          destroy-method="shutdown">
+        <constructor-arg ref="snapshotReferenceSigner"/>
+        <!-- The SAME off-request measure seam the alert + digest handlers use, so a snapshot reads
+             exactly the values the owner would see interactively, under the owner's SecurityContext. -->
+        <constructor-arg ref="aiMeasureValueReader"/>
+        <constructor-arg>
+            <bean class="org.saiku.service.snapshot.SnapshotLimits">
+                <constructor-arg value="64"/>
+                <constructor-arg value="30000"/>
+                <constructor-arg value="8388608"/>
+            </bean>
+        </constructor-arg>
+    </bean>
+
     <!-- The live engine. init-method="start" starts the ticker at boot; destroy-method="shutdown"
          stops both the ticker and worker pools cleanly on context close. Registered handlers: the
          no-op ("NOOP") and the threshold-alert ("THRESHOLD_ALERT", #1098). -->
