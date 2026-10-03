@@ -46,6 +46,24 @@ All notable changes to Saiku are documented here. This project follows
 
 ### Security
 
+- **Bare saved-query embeds scope guest slicer overrides to the saved
+  query's own FILTER axis (CWE-863, presentation scope, saiku#1946).** A
+  `kind=query` embed (`POST /saiku/api/embed/query/{path}`) has no filter
+  panel and no filter tiles, so — unlike the dashboard / app tile paths fixed
+  by saiku#1911 — nothing stopped a guest from re-pointing an arbitrary
+  non-forced hierarchy at arbitrary members, or adding a deeper level beside an
+  authored rows level, surfacing finer-grain rows than the author published
+  (e.g. individual customer names under an authored country roll-up). Forced
+  RLS filters were still enforced, so this was a presentation-scope
+  over-exposure bounded by the owner's `runAs` scope, not an RLS bypass — but
+  it bit hardest for public grants and pre-#1104 opaque tokens, which carry no
+  forced filters at all. Guest overrides are now reduced by
+  `SavedQueryFilterScope` to hierarchies the saved query already carries on its
+  FILTER axis, at an authored level, with the client members intersected with
+  the authored members. Anything else (unknown axis, different level, a
+  non-`in` operator, an entirely out-of-scope selection) is dropped, so the
+  query runs as authored rather than failing open; an MDX-mode, unreadable, or
+  unparseable saved query authorises no overrides at all.
 - **The SPA ships a default CSP and `frame-ancestors` (CWE-693 / CWE-1021,
   saiku#1917).** `SecurityHeadersFilter` emitted *no* framing headers unless
   `-Dsaiku.security.frameAncestors` was set, and a full CSP only under
