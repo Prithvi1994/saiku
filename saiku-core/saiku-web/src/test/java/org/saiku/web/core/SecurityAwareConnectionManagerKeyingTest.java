@@ -243,7 +243,7 @@ public class SecurityAwareConnectionManagerKeyingTest {
                 SecurityAwareConnectionManager.connectionCacheKey("", ""),
                 SecurityAwareConnectionManager.connectionCacheKey(null, null));
         assertEquals(
-                SecurityAwareConnectionManager.connectionCacheKey("ds", "bob"),
+                SecurityAwareConnectionManager.connectionCacheKey("ds", null),
                 SecurityAwareConnectionManager.connectionCacheKey("ds", ""));
     }
 
