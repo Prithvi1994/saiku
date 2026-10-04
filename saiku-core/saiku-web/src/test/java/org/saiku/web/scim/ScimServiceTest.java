@@ -569,6 +569,37 @@ public class ScimServiceTest {
         }
     }
 
+    /** saiku#2065: a SCIM token must not be able to grant ROLE_ADMIN or any other privileged role. */
+    @Test
+    public void groupCreateRejectsPrivilegedRoleNames() {
+        for (String reserved : new String[]{"ROLE_ADMIN", "ROLE_SCIM", "ROLE_ACTUATOR", "role_admin"}) {
+            ScimGroup g = new ScimGroup();
+            g.displayName = reserved;
+            try {
+                scim.createGroup(g);
+                fail("displayName '" + reserved + "' must be rejected");
+            } catch (ScimException e) {
+                assertEquals("invalidValue '" + reserved + "' accepted", "invalidValue", e.getScimType());
+            }
+        }
+    }
+
+    /** saiku#2065: PATCH displayName must also be blocked for privileged role names. */
+    @Test
+    public void groupPatchRejectsPrivilegedRoleNameOnRename() {
+        ScimGroup g = new ScimGroup();
+        g.displayName = "harmless";
+        g = scim.createGroup(g);
+        try {
+            scim.patchGroup(
+                    g.id,
+                    patch("{\"Operations\":[{\"op\":\"replace\",\"path\":\"displayName\",\"value\":\"ROLE_ADMIN\"}]}"));
+            fail("patching displayName to ROLE_ADMIN must be rejected");
+        } catch (ScimException e) {
+            assertEquals("invalidValue", e.getScimType());
+        }
+    }
+
     @Test
     public void userCreateWithGroupsGrantsTheRole() {
         ScimGroup g = new ScimGroup();

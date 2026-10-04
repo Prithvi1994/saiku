@@ -55,6 +55,19 @@ public class ScimService {
     /** {@code USER_ROLES.ROLE} is VARCHAR(45); a longer group name would blow up the INSERT. */
     private static final int MAX_ROLE_LENGTH = 45;
 
+    /**
+     * Roles a SCIM token holder must never be able to grant via a group displayName (saiku#2065,
+     * CWE-269). The SCIM surface is scoped to ROLE_SCIM; anything in this set would expand that
+     * scope to admin or infrastructure authorities.
+     */
+    private static final java.util.Set<String> PRIVILEGED_ROLES = java.util.Set.of(
+            "ROLE_ADMIN",
+            "ROLE_SCIM",
+            "ROLE_ACTUATOR",
+            "ROLE_EMBED_GUEST",
+            "ROLE_SHARE_GUEST",
+            "ROLE_ANONYMOUS");
+
     private final UserService userService;
     private final ScimGroupStore groupStore;
     private final String defaultWorkspace;
@@ -667,7 +680,20 @@ public class ScimService {
             throw ScimException.badRequest(
                     "invalidValue", "displayName must be at most " + MAX_ROLE_LENGTH + " characters");
         }
+        rejectPrivilegedRoleName(name);
         return name;
+    }
+
+    /**
+     * Reject a displayName that maps to a privileged internal role (saiku#2065, CWE-269). A SCIM
+     * token holds only ROLE_SCIM; being able to set a group's displayName to "ROLE_ADMIN" and then
+     * add members to that group would let the bearer escalate any account to admin.
+     */
+    private static void rejectPrivilegedRoleName(String name) {
+        if (PRIVILEGED_ROLES.contains(name.toUpperCase(java.util.Locale.ROOT))) {
+            throw ScimException.badRequest(
+                    "invalidValue", "The displayName '" + name + "' is reserved and cannot be used");
+        }
     }
 
     /**
@@ -755,6 +781,7 @@ public class ScimService {
                 if (name.isEmpty() || name.length() > MAX_ROLE_LENGTH) {
                     throw ScimException.badRequest("invalidValue", "Invalid displayName");
                 }
+                rejectPrivilegedRoleName(name);
                 renameGroup(r, name);
                 return;
             case "members":
