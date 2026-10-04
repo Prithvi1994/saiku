@@ -166,7 +166,12 @@ describe('importFromMondrianXml — bare <PhysicalSchema> parser', () => {
 
 	it('enriches a table from the live source-table catalog and keeps the catalog schema over a mismatched XML schema', () => {
 		const sourceTables: SourceTableCandidate[] = [
-			{ schema: 'public', name: 'customer', columns: [{ name: 'id', sqlType: 'INTEGER' }], onCanvas: false }
+			{
+				schema: 'public',
+				name: 'customer',
+				columns: [{ name: 'id', sqlType: 'INTEGER' }],
+				onCanvas: false
+			}
 		];
 		const XML = `<PhysicalSchema>
 			<Table name="customer" schema="other"/>
@@ -183,9 +188,9 @@ describe('importFromMondrianXml — bare <PhysicalSchema> parser', () => {
 			<Table name="orphan"><Key name="k"><Column name="id"/></Key></Table>
 		</PhysicalSchema>`;
 		const res = importFromMondrianXml(XML, { connectionId: 'c', sourceTables: [] });
-		expect(res.warnings.some((w) => w.includes("wasn't found in the active connection's catalog"))).toBe(
-			true
-		);
+		expect(
+			res.warnings.some((w) => w.includes("wasn't found in the active connection's catalog"))
+		).toBe(true);
 	});
 
 	it('throws AmbiguousSchemaError when an unqualified table name exists in more than one catalog schema', () => {
@@ -207,8 +212,18 @@ describe('importFromMondrianXml — bare <PhysicalSchema> parser', () => {
 
 	it('resolves an ambiguity via schemaOverrides instead of throwing', () => {
 		const sourceTables: SourceTableCandidate[] = [
-			{ schema: 'a', name: 'customer', columns: [{ name: 'id', sqlType: 'INTEGER' }], onCanvas: false },
-			{ schema: 'b', name: 'customer', columns: [{ name: 'id', sqlType: 'INTEGER' }], onCanvas: false }
+			{
+				schema: 'a',
+				name: 'customer',
+				columns: [{ name: 'id', sqlType: 'INTEGER' }],
+				onCanvas: false
+			},
+			{
+				schema: 'b',
+				name: 'customer',
+				columns: [{ name: 'id', sqlType: 'INTEGER' }],
+				onCanvas: false
+			}
 		];
 		const XML = `<PhysicalSchema><Table name="customer"/></PhysicalSchema>`;
 		const res = importFromMondrianXml(XML, {
@@ -284,7 +299,10 @@ describe('importFromMondrianXml — Mondrian 3 cube parser', () => {
 			expect.arrayContaining(['sales_fact', 'time_by_day'])
 		);
 		expect(res.state.joins).toHaveLength(1);
-		expect(res.state.joins[0]).toMatchObject({ sourceColumnName: 'time_id', targetColumnName: 'time_id' });
+		expect(res.state.joins[0]).toMatchObject({
+			sourceColumnName: 'time_id',
+			targetColumnName: 'time_id'
+		});
 	});
 
 	it('warns when a <DimensionUsage> references a source with no matching schema-level <Dimension>', () => {
@@ -295,7 +313,9 @@ describe('importFromMondrianXml — Mondrian 3 cube parser', () => {
 			</Cube>
 		</Schema>`;
 		const res = importFromMondrianXml(XML, { connectionId: 'c' });
-		expect(res.warnings.some((w) => w.includes('no schema-level <Dimension name="Time">'))).toBe(true);
+		expect(res.warnings.some((w) => w.includes('no schema-level <Dimension name="Time">'))).toBe(
+			true
+		);
 	});
 
 	it('resolves a snowflake <Hierarchy><Join> on a schema-level shared dimension into an internal join between the two dimension tables', () => {
@@ -394,7 +414,12 @@ describe('importFromMondrianXml — Mondrian 3 cube parser', () => {
 
 	it('inherits the catalog schema for a bare (unqualified) fact/dimension table, FoodMart-style', () => {
 		const sourceTables: SourceTableCandidate[] = [
-			{ schema: 'public', name: 'sales_fact', columns: [{ name: 'amount', sqlType: 'NUMERIC' }], onCanvas: false }
+			{
+				schema: 'public',
+				name: 'sales_fact',
+				columns: [{ name: 'amount', sqlType: 'NUMERIC' }],
+				onCanvas: false
+			}
 		];
 		const XML = `<Schema name="t">
 			<Cube name="Sales">
