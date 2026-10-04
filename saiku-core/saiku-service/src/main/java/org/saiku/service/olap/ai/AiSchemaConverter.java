@@ -1469,6 +1469,16 @@ public class AiSchemaConverter {
         }
         checkAxisForPii(req.getRows(), schema, "rows");
         checkAxisForPii(req.getColumns(), schema, "columns");
+        if (req.getOrder() != null) {
+            for (int i = 0; i < req.getOrder().size(); i++) {
+                AiOrderBy o = req.getOrder().get(i);
+                if (o == null) continue;
+                AiSchema.Measure resolved = lookupMeasureOrNull(o.getBy(), schema);
+                if (resolved != null && resolved.pii) {
+                    throw piiRefusal("order[" + i + "].by", "Measure '" + resolved.name + "'");
+                }
+            }
+        }
         if (req.getFilters() != null) {
             for (int i = 0; i < req.getFilters().size(); i++) {
                 AiFilterSelection f = req.getFilters().get(i);
@@ -1557,7 +1567,7 @@ public class AiSchemaConverter {
         return new AiPiiException(
                 field,
                 what + " is annotated PII (saiku.semantic.pii=true) and cannot be queried over the AI "
-                        + "surface. PII columns are refused on measures, rows, columns and filters alike — "
+                        + "surface. PII columns are refused on measures, rows, columns, filters and order alike — "
                         + "query an aggregate measure or a non-PII level over the same dimension instead.",
                 null);
     }

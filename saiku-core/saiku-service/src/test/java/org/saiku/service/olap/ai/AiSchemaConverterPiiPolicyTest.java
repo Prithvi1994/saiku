@@ -154,6 +154,22 @@ public class AiSchemaConverterPiiPolicyTest {
     }
 
     @Test
+    public void pii_measure_in_order_by_is_refused() {
+        // TopCount/BottomCount with a PII measure as the sort key exposes per-person ordering even
+        // when the axis itself is a non-PII level — refused the same way as measures[].name.
+        AiQueryRequest req = baseReq();
+        req.setOrder(Collections.singletonList(new AiOrderBy("Customer Email", "desc")));
+        assertPiiRefused("order[0].by", () -> converter.convert(req, schema));
+    }
+
+    @Test
+    public void pii_measure_in_order_by_reached_through_alias_is_refused() {
+        AiQueryRequest req = baseReq();
+        req.setOrder(Collections.singletonList(new AiOrderBy("Email Address", "desc")));
+        assertPiiRefused("order[0].by", () -> converter.convert(req, schema));
+    }
+
+    @Test
     public void non_pii_query_is_unaffected() {
         // The gate must be inert on an ordinary cube: a parent level over the same dimension, a
         // normal measure, no annotations in sight — the query converts exactly as it did before.
