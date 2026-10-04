@@ -74,6 +74,7 @@ public class ScimUserProfileSqlTest {
     @Test
     public void bootAltersAreIdempotent() throws Exception {
         applyBootAlters();
+        insertUser("bootcheck");
         // A second boot must be a no-op, not a "column already exists" failure — loadUsers runs on
         // every start against an existing saiku-home.
         applyBootAlters();
