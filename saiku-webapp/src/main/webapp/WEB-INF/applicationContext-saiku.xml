@@ -125,8 +125,15 @@
          "mvc"/PathPattern matching which subtly changed `*` behaviour and
          broke the existing `/rest/saiku/session*` rule, sending the SPA's
          anonymous login POST to the catch-all `/rest/**` =
-         isFullyAuthenticated() rule and 302-redirecting to /login. -->
-    <security:http auto-config='true' use-expressions="true" request-matcher="ant">
+         isFullyAuthenticated() rule and 302-redirecting to /login.
+         filter-all-dispatcher-types="false": restrict Spring Security's AuthorizationFilter
+         to REQUEST dispatches only (Spring Security 6.x default is all dispatchers). Without
+         this, the saiku#1949 terminal catch-all (/**) intercepts ERROR dispatches from the
+         container's error-page mechanism (e.g. Jasper returning a 404 for a non-existent
+         *.jsp), which re-challenges authentication in the ERROR context → loop → 500.
+         Security is unchanged for direct requests: the catch-all blocks all unmapped REQUEST
+         dispatches as intended. -->
+    <security:http auto-config='true' use-expressions="true" request-matcher="ant" filter-all-dispatcher-types="false">
       <!--access-denied-page="/login.jsp"-->
       <!--
         CSRF: enforced on state-changing /rest/** methods.
