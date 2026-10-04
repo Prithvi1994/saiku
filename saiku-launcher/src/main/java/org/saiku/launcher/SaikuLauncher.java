@@ -334,7 +334,7 @@ public class SaikuLauncher implements Callable<Integer> {
         }
 
         /**
-         * saiku#1859 — point a {@link org.eclipse.jetty.session.SessionHandler} at a
+         * saiku#1859 — point a {@link org.eclipse.jetty.session.SessionManager} at a
          * {@link FileSessionDataStore} under {@code sessionsDir}, and make it write a session out
          * as it is USED rather than only when the cache shuts down.
          *
@@ -344,10 +344,16 @@ public class SaikuLauncher implements Callable<Integer> {
          * so the intent is pinned and a future default flip can't silently regress it) writes at
          * the end of every request that touched the session.
          *
+         * <p>Typed to {@link org.eclipse.jetty.session.SessionManager} (the common interface) so
+         * it accepts both {@link org.eclipse.jetty.session.SessionHandler} (used in unit tests)
+         * and {@link org.eclipse.jetty.ee10.servlet.SessionHandler} (returned by
+         * {@link org.eclipse.jetty.ee10.webapp.WebAppContext#getSessionHandler()}) — the two are
+         * unrelated in Jetty 12.1.x but both implement {@code SessionManager}.
+         *
          * <p>Package-private and static so it is directly unit-testable without booting Jetty.
          */
         static void configureSessionPersistence(
-                org.eclipse.jetty.session.SessionHandler sessionHandler, File sessionsDir) throws java.io.IOException {
+                org.eclipse.jetty.session.SessionManager sessionHandler, File sessionsDir) throws java.io.IOException {
             sessionsDir.mkdirs();
             FileSessionDataStore sessionStore = new FileSessionDataStore();
             sessionStore.setStoreDir(sessionsDir);
