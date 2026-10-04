@@ -362,7 +362,8 @@ public class SaikuLauncher implements Callable<Integer> {
             sessionCache.setSaveOnCreate(true);
             sessionCache.setFlushOnResponseCommit(true);
             sessionHandler.setSessionCache(sessionCache);
-            sessionHandler.setMaxInactiveInterval(7 * 24 * 60 * 60);
+            ((org.eclipse.jetty.session.AbstractSessionManager) sessionHandler)
+                    .setMaxInactiveInterval(7 * 24 * 60 * 60);
         }
 
         /**
