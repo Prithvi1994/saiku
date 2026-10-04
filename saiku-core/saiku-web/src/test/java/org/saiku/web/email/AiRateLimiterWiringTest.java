@@ -38,9 +38,7 @@ public class AiRateLimiterWiringTest {
     private static final Object[][] EXPECTED = {
         {"unsubscribeResource", UnsubscribeResource.class, "rateLimiter", "mail.unsubscribe"},
         {"consentConfirmResource", ConsentConfirmResource.class, "rateLimiter", "mail.consent"},
-        {
-            "consentConfirmResource", ConsentConfirmResource.class, "addressRateLimiter", "mail.consent.address"
-        },
+        {"consentConfirmResource", ConsentConfirmResource.class, "addressRateLimiter", "mail.consent.address"},
         {"mailConfigResource", MailConfigResource.class, "testSendRateLimiter", "mail.test"},
         {"mailSendResource", MailSendResource.class, "inviteRateLimiter", "mail.invite"},
         {"mailSendResource", MailSendResource.class, "sendRateLimiter", "mail.send"},
