@@ -107,8 +107,7 @@ public class SaikuOlapConnectionLocationTest {
         assertTrue(
                 "XMLA URL must receive the ';' property terminator",
                 SaikuOlapConnection.needsPropertyTerminator(
-                        "jdbc:xmla:Server=http://host/xmla",
-                        RecordingJdbcDriver.class.getName()));
+                        "jdbc:xmla:Server=http://host/xmla", RecordingJdbcDriver.class.getName()));
     }
 
     @Test
