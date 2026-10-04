@@ -344,6 +344,37 @@ public class SnapshotReferenceSignerTest {
                 SnapshotReferenceException.class, () -> signer.sign(reference("  ", "shared/exec.saikudash", FUTURE)));
     }
 
+    // ---- expiry required (saiku#2162) ----
+
+    @Test
+    public void aReferenceWithZeroExpiryIsRejectedAtSignTime() {
+        // 0 is the Builder's "not set" sentinel — signing such a reference would produce a token
+        // that verify() can never accept, so the error is surfaced at sign time.
+        assertThrows(
+                SnapshotReferenceException.class,
+                () -> signer.sign(reference("alice", "shared/exec.saikudash", 0L)));
+    }
+
+    @Test
+    public void aReferenceWithNegativeExpiryIsRejectedAtSignTime() {
+        assertThrows(
+                SnapshotReferenceException.class,
+                () -> signer.sign(reference("alice", "shared/exec.saikudash", -1L)));
+    }
+
+    @Test
+    public void aBuilderWithoutExpiryIsRejectedAtSignTime() {
+        // The old Builder default was Long.MAX_VALUE; after saiku#2162 it is 0, which validate()
+        // rejects. This test pins the invariant: calling .build() without .expiresAtEpochMillis()
+        // must not produce a signable reference.
+        SnapshotReference ref = new SnapshotReference.Builder()
+                .owner("alice")
+                .dashboardPath("shared/exec.saikudash")
+                .panel(new SnapshotPanel("L", "a/b/s/x", "m", Map.of()))
+                .build(); // no expiresAtEpochMillis() call
+        assertThrows(SnapshotReferenceException.class, () -> signer.sign(ref));
+    }
+
     /** Recompute the MAC the signer would produce for {@code payload} (test-only, uses its key). */
     private static byte[] macOf(SnapshotReferenceSigner s, String payload) {
         // The signer exposes payloadFor but not hmac; re-derive by signing an equivalent reference

@@ -114,6 +114,11 @@ public final class SnapshotReference {
         for (SnapshotPanel p : panels) {
             p.validate();
         }
+        // saiku#2162: an unset expiry (0 sentinel or Long.MAX_VALUE default) violates the class
+        // invariant that signed tokens expire. Callers MUST call Builder.expiresAtEpochMillis().
+        if (expiresAtEpochMillis <= 0) {
+            throw new SnapshotReferenceException("snapshot reference expiry is required");
+        }
     }
 
     /**
@@ -288,7 +293,7 @@ public final class SnapshotReference {
         private String dashboardPath;
         private String title;
         private final List<SnapshotPanel> panels = new ArrayList<>();
-        private long expiresAt = Long.MAX_VALUE;
+        private long expiresAt = 0L; // 0 = not set; validate() rejects it (saiku#2162)
 
         public Builder owner(String v) {
             this.owner = v;
