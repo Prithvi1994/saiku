@@ -169,7 +169,9 @@ public class WeakAdminPasswordPolicyTest {
     public void adminIsWeak() {
         assertEquals("the shipped default is refused", "it is a well-known weak password", reason("admin", "admin"));
         assertEquals(
-                "a famous short word is named as such", "it is a well-known weak password", reason("admin", "password"));
+                "a famous short word is named as such",
+                "it is a well-known weak password",
+                reason("admin", "password"));
         assertEquals(
                 "the denylist is case-insensitive",
                 "it is a well-known weak password",
