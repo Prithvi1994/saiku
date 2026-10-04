@@ -181,8 +181,7 @@ public final class SavedQueryFilterScope {
         return out;
     }
 
-    /** The single authored hierarchy a client-supplied name resolves to, or null when none /
-     *  ambiguous. */
+    /** The single authored hierarchy a client-supplied name resolves to, or null when none / ambiguous. */
     private static AuthoredHierarchy resolve(Map<String, AuthoredHierarchy> scope, String name) {
         if (name == null) return null;
         AuthoredHierarchy h = scope.get(name.trim().toLowerCase(Locale.ROOT));

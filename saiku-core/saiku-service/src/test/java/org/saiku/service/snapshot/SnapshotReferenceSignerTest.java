@@ -46,7 +46,8 @@ public class SnapshotReferenceSignerTest {
         assertEquals("Executive Overview", verified.title());
         assertEquals(1, verified.panels().size());
         assertEquals("Total Units", verified.panels().get(0).label());
-        assertEquals("foodmart/Sales/Foodmart/Sales_Cube", verified.panels().get(0).cube());
+        assertEquals(
+                "foodmart/Sales/Foodmart/Sales_Cube", verified.panels().get(0).cube());
         assertEquals("Unit Sales", verified.panels().get(0).measure());
     }
 
@@ -86,9 +87,11 @@ public class SnapshotReferenceSignerTest {
                         "evil~label=o=root\np=/etc/passwd", "a/b/s/x", "m", Map.of("dim", List.of("[2001]", "x=y")))),
                 FUTURE);
         SnapshotReference verified = signer.verify(signer.sign(ref), NOW);
-        assertEquals("evil~label=o=root\np=/etc/passwd", verified.panels().get(0).label());
+        assertEquals(
+                "evil~label=o=root\np=/etc/passwd", verified.panels().get(0).label());
         assertEquals(1, verified.panels().size());
-        assertEquals(List.of("[2001]", "x=y"), verified.panels().get(0).filters().get("dim"));
+        assertEquals(
+                List.of("[2001]", "x=y"), verified.panels().get(0).filters().get("dim"));
     }
 
     // ---- signature failures: fail closed ----
@@ -348,15 +351,13 @@ public class SnapshotReferenceSignerTest {
         // 0 is the Builder's "not set" sentinel — signing such a reference would produce a token
         // that verify() can never accept, so the error is surfaced at sign time.
         assertThrows(
-                SnapshotReferenceException.class,
-                () -> signer.sign(reference("alice", "shared/exec.saikudash", 0L)));
+                SnapshotReferenceException.class, () -> signer.sign(reference("alice", "shared/exec.saikudash", 0L)));
     }
 
     @Test
     public void aReferenceWithNegativeExpiryIsRejectedAtSignTime() {
         assertThrows(
-                SnapshotReferenceException.class,
-                () -> signer.sign(reference("alice", "shared/exec.saikudash", -1L)));
+                SnapshotReferenceException.class, () -> signer.sign(reference("alice", "shared/exec.saikudash", -1L)));
     }
 
     @Test

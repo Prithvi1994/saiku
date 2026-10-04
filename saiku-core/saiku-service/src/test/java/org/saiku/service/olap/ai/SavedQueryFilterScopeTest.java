@@ -241,9 +241,9 @@ public class SavedQueryFilterScopeTest {
 
     @Test
     public void nullsAndEmptiesAreSafe() {
-        assertTrue(SavedQueryFilterScope.narrowToAuthoredScope(
-                        null, Collections.singletonList(filter("G", "G", "L", "m")))
-                .isEmpty());
+        assertTrue(
+                SavedQueryFilterScope.narrowToAuthoredScope(null, Collections.singletonList(filter("G", "G", "L", "m")))
+                        .isEmpty());
         assertTrue(SavedQueryFilterScope.narrowToAuthoredScope(savedQueryWithAuthoredSlicer(), null)
                 .isEmpty());
         assertTrue(SavedQueryFilterScope.narrowToAuthoredScope(savedQueryWithAuthoredSlicer(), Collections.emptyList())
