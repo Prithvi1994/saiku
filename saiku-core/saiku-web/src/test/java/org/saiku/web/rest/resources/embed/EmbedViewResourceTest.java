@@ -1070,13 +1070,6 @@ public class EmbedViewResourceTest {
 
     /* --------------------------- helpers ---------------------------- */
 
-    /** Build a TileQueryOverrides from client filter selections. */
-    private static EmbedViewResource.TileQueryOverrides overrides(AiFilterSelection... fs) {
-        EmbedViewResource.TileQueryOverrides o = new EmbedViewResource.TileQueryOverrides();
-        o.filters = new ArrayList<>(Arrays.asList(fs));
-        return o;
-    }
-
     /** op:"in" client filter on dim (dim=hierarchy=level for the test cube). */
     private static AiFilterSelection in(String dim, String... members) {
         AiFilterSelection f = new AiFilterSelection(dim, dim, dim, new ArrayList<>(Arrays.asList(members)));
