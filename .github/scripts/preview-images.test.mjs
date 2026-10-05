@@ -6,7 +6,12 @@
 /** Image tag grammar: the tag the lifecycle asks for is the one docker.yml publishes. */
 
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { test } from 'node:test';
+import { fileURLToPath } from 'node:url';
+
+import { IMAGE_SOURCE_LABEL } from './preview-guard.mjs';
 
 import {
   IMAGE_REGISTRY,
@@ -17,6 +22,8 @@ import {
   imageRef,
   prImageTag,
 } from './preview-images.mjs';
+
+const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 test('the per-SHA tag is the first 7 hex of the head sha and nothing else is accepted', () => {
   assert.equal(prImageTag('0123456789abcdef0123456789abcdef01234567'), '0123456');
@@ -47,6 +54,19 @@ test('describeImage drops anything outside the grammar instead of repairing it',
   }
 });
 
-test('the tag length is the 7 hex that docker.yml tags PR head builds with (saiku#2170)', () => {
-  assert.equal(SHA_TAG_LENGTH, 7);
+test('SHA_TAG_LENGTH is the length docker.yml tags PR head builds with (${IMAGE_SHA::N})', () => {
+  const workflow = readFileSync(join(root, '.github', 'workflows', 'docker.yml'), 'utf8');
+  const m = /short_sha=\$\{IMAGE_SHA::(\d+)\}/.exec(workflow);
+  assert.ok(m, 'docker.yml no longer derives a short_sha from IMAGE_SHA: update preview-images.mjs and this test');
+  assert.equal(Number(m[1]), SHA_TAG_LENGTH);
+  // The tag is the PR HEAD sha, not the merge commit GITHUB_SHA points at on pull_request events.
+  assert.match(workflow, /IMAGE_SHA: \$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}/);
+  assert.match(workflow, /type=raw,value=\$\{\{ steps\.publish\.outputs\.short_sha \}\},enable=\$\{\{ github\.event_name == 'pull_request' \}\}/);
+});
+
+test('the image prune label is one docker.yml stamps on every image (docker/metadata-action labels)', () => {
+  const workflow = readFileSync(join(root, '.github', 'workflows', 'docker.yml'), 'utf8');
+  assert.match(workflow, /labels: \$\{\{ steps\.meta\.outputs\.labels \}\}/);
+  // metadata-action sets org.opencontainers.image.source from the repository URL.
+  assert.equal(IMAGE_SOURCE_LABEL, 'org.opencontainers.image.source=https://github.com/spiculedata/saiku');
 });

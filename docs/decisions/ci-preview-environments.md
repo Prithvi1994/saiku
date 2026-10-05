@@ -159,8 +159,9 @@ added to that role in a companion PR.
   in-memory host, the compose file is rendered (not started), and the self-check was run
   against a real 4.8.0 launcher locally and against a fake Saiku in tests.
 * The e2e-against-preview job and the validation report are a later phase.
-* The per-PR image build is added by the per-PR image PR (`docker.yml`, saiku#2170): this
-  system assumes it pushes the 7-hex head-sha tag for same-repo PRs.
+* The image contract is `docker.yml` (saiku#2170): same-repo PRs push `pr-<n>` and the 7-hex
+  PR **head** sha, and a test pins that length and the head-sha source. Per `docs/ci-images.md`
+  the bare-hex tag is collected after 30 days, which is far beyond a preview's life.
 
 ## Consequences
 
