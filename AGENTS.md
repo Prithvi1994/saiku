@@ -122,6 +122,18 @@ CI (`.github/workflows/ci.yml`) runs `mvn -B -ntp -DskipITs=false verify` on **u
 
 - **CI feedback, flake policy, acceptance specs** (ported from saiku-cloud; each has a doc): a failing run is explained in `ci-feedback.json` and a sticky PR comment by `.github/workflows/ci-feedback.yml` — read the comment's first real error before the raw log, and add any new PR-gating workflow's `name:` to its `workflow_run.workflows` list (a test fails until you do) (`docs/ci-feedback.md`). A failing test is retried once and recorded; a quarantine entry in `.github/flake-quarantine.json` needs an owner and an expiry, and no test asserts on a wall clock or today's date (`docs/ci-flakes.md`). A PR that closes issue N ships `acceptance/N/spec.json` once the repo variable `ACCEPTANCE_ENFORCE_FROM_ISSUE` reaches N, or takes the `acceptance-waived` label on a docs-or-tests-only change (`docs/acceptance-specs.md`). The tooling's own tests are `node --test ".github/scripts/*.test.mjs"` (the required `ci / flake-policy tests`).
 
+## Preview environments
+
+Same-repo PRs by the Hive bot (`PREVIEW_AUTHORS`), PRs labelled `preview`, and PRs a collaborator `/preview`s get a throwaway container of their own head-sha image on the shared preview box, at `https://oss-pr-<n>.preview.saiku.bi` (tailnet only). The lifecycle is `.github/scripts/preview-*.mjs` driven by `preview-env.yml`, `preview-command.yml` and the hourly `preview-reaper.yml`; the stack, env renderer and self-check are in `infra/preview/`. Design, security model and the provenance of each file (ported from saiku-cloud): `docs/decisions/ci-preview-environments.md`.
+
+```bash
+node --test .github/scripts/preview-*.test.mjs          # lifecycle, guard, workflow-shape tests
+infra/preview/tests/test-compose.sh                      # compose render + negative controls (needs docker compose)
+infra/preview/tests/test-render-env.sh && infra/preview/tests/test-selfcheck.sh
+```
+
+Rules that cost time elsewhere and are pinned by tests here: the preview workflows run from the **base branch** and never check out or execute PR code or interpolate PR text into a shell; every host command is built only by `preview-guard.mjs` (project grammar `saiku-oss-pr-<n>`, so the saiku-cloud previews on the same box are untouchable); secrets are masked and only written to 0600 files; action pins are full 40-hex commits. The host state is `/var/lib/saiku-preview-oss` (provisioned from the saiku-cloud Ansible role); a preview needs `SAIKU_ADMIN_PASSWORD` (random) and uses `SAIKU_SEED=true`, not `SAIKU_DEMO`.
+
 ## Agent resources
 
 - **Skills** — `.claude/skills/<name>/SKILL.md`: step-by-step workflows for recurring repo tasks (rebuilding the launcher after UI changes, cutting a release). Claude Code loads them automatically; other agents can read them as plain markdown.
