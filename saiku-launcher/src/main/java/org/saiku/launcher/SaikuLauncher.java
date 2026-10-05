@@ -347,7 +347,8 @@ public class SaikuLauncher implements Callable<Integer> {
          * <p>Package-private and static so it is directly unit-testable without booting Jetty.
          */
         static void configureSessionPersistence(
-                org.eclipse.jetty.session.SessionHandler sessionHandler, File sessionsDir) throws java.io.IOException {
+                org.eclipse.jetty.session.AbstractSessionManager sessionHandler, File sessionsDir)
+                throws java.io.IOException {
             sessionsDir.mkdirs();
             FileSessionDataStore sessionStore = new FileSessionDataStore();
             sessionStore.setStoreDir(sessionsDir);

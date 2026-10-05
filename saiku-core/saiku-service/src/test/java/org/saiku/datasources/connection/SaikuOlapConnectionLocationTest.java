@@ -16,6 +16,9 @@ import java.sql.Driver;
 import java.sql.DriverManager;
 import java.sql.DriverPropertyInfo;
 import java.sql.SQLFeatureNotSupportedException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.Locale;
 import java.util.Properties;
 import java.util.logging.Logger;
@@ -44,6 +47,8 @@ public class SaikuOlapConnectionLocationTest {
 
     private RecordingJdbcDriver olapDriver;
     private PlainJdbcDriver plainDriver;
+    /** Real olap4j drivers (XMLA, Mondrian) shadowed for the test, restored afterwards. */
+    private final List<Driver> shadowedDrivers = new ArrayList<>();
 
     @Before
     public void registerDrivers() throws Exception {
@@ -52,15 +57,45 @@ public class SaikuOlapConnectionLocationTest {
         // Order matters: DriverManager asks in registration order, and the shared recording driver
         // claims every jdbc: URL. The plain driver answers only its own sub-scheme, so registering
         // it first routes jdbc:saikuplain:… to it and everything else to the recording driver.
+        // The real XMLA and Mondrian olap4j drivers register themselves when their jars are on the
+        // test classpath, and they sit ahead of the recording driver, so a jdbc:xmla: or
+        // jdbc:mondrian: URL would be connected for real (UnknownHostException: host). Take them
+        // out of DriverManager for the duration of each test.
+        for (Driver real : Collections.list(DriverManager.getDrivers())) {
+            if (acceptsAny(real, "jdbc:xmla:Server=http://host/xmla", "jdbc:mondrian:Jdbc=x;Catalog=mondrian://x")) {
+                shadowedDrivers.add(real);
+                DriverManager.deregisterDriver(real);
+            }
+        }
         DriverManager.registerDriver(plainDriver);
         DriverManager.registerDriver(olapDriver);
         System.setProperty(JdbcUrlPolicy.ALLOWED_SCHEMES_PROPERTY, TEST_SCHEME + "," + PLAIN_SCHEME);
+    }
+
+    private static boolean acceptsAny(Driver driver, String... urls) {
+        if (driver instanceof RecordingJdbcDriver || driver instanceof PlainJdbcDriver) {
+            return false;
+        }
+        for (String url : urls) {
+            try {
+                if (driver.acceptsURL(url)) {
+                    return true;
+                }
+            } catch (java.sql.SQLException ignored) {
+                // a driver that cannot answer is not one we need to move aside
+            }
+        }
+        return false;
     }
 
     @After
     public void deregisterDrivers() throws Exception {
         DriverManager.deregisterDriver(olapDriver);
         DriverManager.deregisterDriver(plainDriver);
+        for (Driver real : shadowedDrivers) {
+            DriverManager.registerDriver(real);
+        }
+        shadowedDrivers.clear();
         System.clearProperty(JdbcUrlPolicy.ALLOWED_SCHEMES_PROPERTY);
     }
 

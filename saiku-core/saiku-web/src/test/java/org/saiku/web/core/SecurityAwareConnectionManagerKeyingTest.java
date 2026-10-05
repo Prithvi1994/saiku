@@ -243,6 +243,10 @@ public class SecurityAwareConnectionManagerKeyingTest {
                 SecurityAwareConnectionManager.connectionCacheKey("", ""),
                 SecurityAwareConnectionManager.connectionCacheKey(null, null));
         assertEquals(
+                SecurityAwareConnectionManager.connectionCacheKey("ds", ""),
+                SecurityAwareConnectionManager.connectionCacheKey("ds", null));
+        // An empty user and a real user are different principals: the key is injective in the user.
+        assertNotEquals(
                 SecurityAwareConnectionManager.connectionCacheKey("ds", "bob"),
                 SecurityAwareConnectionManager.connectionCacheKey("ds", ""));
     }

@@ -203,7 +203,8 @@ public class EmbedViewResourceTest {
                 "homes/admin/sales.saiku", null, overrides(filter("Store", "Store", "Store Name", FRESNO)));
 
         assertEquals(200, r.getStatus());
-        assertTrue(ai.lastSavedRequest.getFilters() == null || ai.lastSavedRequest.getFilters().isEmpty());
+        assertTrue(ai.lastSavedRequest.getFilters() == null
+                || ai.lastSavedRequest.getFilters().isEmpty());
     }
 
     @Test
@@ -217,7 +218,8 @@ public class EmbedViewResourceTest {
                 "homes/admin/sales.saiku", null, overrides(filter("Geography", "Geography", "City", SF)));
 
         assertEquals(200, r.getStatus());
-        assertTrue(ai.lastSavedRequest.getFilters() == null || ai.lastSavedRequest.getFilters().isEmpty());
+        assertTrue(ai.lastSavedRequest.getFilters() == null
+                || ai.lastSavedRequest.getFilters().isEmpty());
     }
 
     @Test
@@ -232,7 +234,8 @@ public class EmbedViewResourceTest {
                 "homes/admin/sales.saiku", null, overrides(filter("Geography", "Geography", "State", CA)));
 
         assertEquals(200, r.getStatus());
-        assertTrue(ai.lastSavedRequest.getFilters() == null || ai.lastSavedRequest.getFilters().isEmpty());
+        assertTrue(ai.lastSavedRequest.getFilters() == null
+                || ai.lastSavedRequest.getFilters().isEmpty());
     }
 
     @Test
@@ -1069,13 +1072,6 @@ public class EmbedViewResourceTest {
     }
 
     /* --------------------------- helpers ---------------------------- */
-
-    /** Build a TileQueryOverrides from client filter selections. */
-    private static EmbedViewResource.TileQueryOverrides overrides(AiFilterSelection... fs) {
-        EmbedViewResource.TileQueryOverrides o = new EmbedViewResource.TileQueryOverrides();
-        o.filters = new ArrayList<>(Arrays.asList(fs));
-        return o;
-    }
 
     /** op:"in" client filter on dim (dim=hierarchy=level for the test cube). */
     private static AiFilterSelection in(String dim, String... members) {
