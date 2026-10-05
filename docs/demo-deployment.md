@@ -57,5 +57,6 @@ admin password `admin` is public by design (the smoke test uses it).
   fires; the previous version keeps serving. Retries of the same bad image back off for an hour.
 - Rollback: `gh workflow run promote-green.yml --ref development -f sha=<older sha>`.
 - The earlier manual runbook (`docker pull && stop && rm && run`) is still valid.
-- GHCR retention (`ghcr-tag-retention.yml`, if present) must treat `development-green`
-  like `development`/`main`/`latest`: never delete a version carrying it.
+- GHCR retention (`ghcr-tag-retention.yml`, docs/ci-images.md) never collects `sha-<short>` or
+  `development-green` versions: it only expires bare-hex PR SHAs and `pr-<n>` tags, and a
+  version with any other tag shape is kept. Rollback targets therefore stay available.
