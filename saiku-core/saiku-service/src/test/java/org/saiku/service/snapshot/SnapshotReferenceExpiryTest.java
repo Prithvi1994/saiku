@@ -39,7 +39,8 @@ public class SnapshotReferenceExpiryTest {
 
         // The default is "unset", not "never": it is rejected instead of signed.
         assertEquals(0L, builder.build().expiresAtEpochMillis());
-        SnapshotReferenceException e = assertThrows(SnapshotReferenceException.class, () -> builder.build().validate());
+        SnapshotReferenceException e = assertThrows(
+                SnapshotReferenceException.class, () -> builder.build().validate());
         assertEquals("snapshot reference expiry is required", e.getMessage());
         assertThrows(SnapshotReferenceException.class, () -> signer.sign(builder.build()));
     }
@@ -57,8 +58,8 @@ public class SnapshotReferenceExpiryTest {
     public void aTokenMintedBeforeTheFixIsRefusedOnVerify() {
         // A token signed by an older build carries e=9223372036854775807 and used to verify for ~292
         // million years: the signature is genuine, so only the expiry guard can stop it.
-        byte[] payloadBytes = signer.payloadFor(reference("alice", Long.MAX_VALUE))
-                .getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        byte[] payloadBytes =
+                signer.payloadFor(reference("alice", Long.MAX_VALUE)).getBytes(java.nio.charset.StandardCharsets.UTF_8);
         String encoded = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(payloadBytes);
         String mac = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(macOf(payloadBytes));
         String token = encoded + "." + mac;
