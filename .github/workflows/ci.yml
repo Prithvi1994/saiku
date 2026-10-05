@@ -3,6 +3,12 @@ on:
   push:
     branches: [development, "phase-*"]
   pull_request:
+  # GitHub's merge queue tests the exact merge result (the PR rebased onto the
+  # queue ahead of it) before merging, so a PR cannot land on a stale base. The
+  # queue only merges when this workflow's required check (`ci`) passes on the
+  # `gh-readonly-queue/...` ref, so the workflow MUST run on merge_group.
+  merge_group:
+    types: [checks_requested]
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -30,11 +36,14 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: filter
+        # A queued merge always runs everything (see the job conditions below), so
+        # there is nothing to filter and no PR to list files from.
+        if: github.event_name != 'merge_group'
         with:
           # Default predicate-quantifier ("some") matches when ANY changed
           # file hits ANY pattern in the filter — the semantics we want.
-          # The downstream jobs ALSO have `|| github.event_name == 'push'`
-          # so the merge commit to development always exercises everything.
+          # The downstream jobs ALSO run on `push` and `merge_group`, so the merge
+          # commit to development and every queued merge always exercise everything.
           filters: |
             java:
               - 'saiku-bom/**'
@@ -64,7 +73,7 @@ jobs:
   build:
     name: build (JDK 22, ubuntu-latest)
     needs: changes
-    if: needs.changes.outputs.java == 'true' || github.event_name == 'push'
+    if: needs.changes.outputs.java == 'true' || github.event_name == 'push' || github.event_name == 'merge_group'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -143,7 +152,7 @@ jobs:
   ui:
     name: ui (svelte-check + vitest + build + e2e)
     needs: changes
-    if: needs.changes.outputs.ui == 'true' || github.event_name == 'push'
+    if: needs.changes.outputs.ui == 'true' || github.event_name == 'push' || github.event_name == 'merge_group'
     runs-on: ubuntu-24.04
     defaults:
       run:
@@ -187,7 +196,7 @@ jobs:
   dist:
     name: bundle (saiku-dist zip)
     needs: changes
-    if: needs.changes.outputs.java == 'true' || github.event_name == 'push'
+    if: needs.changes.outputs.java == 'true' || github.event_name == 'push' || github.event_name == 'merge_group'
     runs-on: ubuntu-latest
     # Independent of build — give people a downloadable bundle even if a slow
     # integration test in `build` is still running. CI passing the bundle ⇔
