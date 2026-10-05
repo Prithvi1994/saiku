@@ -184,6 +184,21 @@ jobs:
           path: saiku-ui/test-results/
           retention-days: 7
 
+  # Demo-deploy script (deploy/demo/): shellcheck + the fake-docker test suite.
+  # No build tooling, no docker daemon, no network - cheap enough for every PR and
+  # push, so it is not path-filtered (a skipped required check would hide a break).
+  demo-deploy:
+    name: demo deploy script (shellcheck + tests)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: shellcheck
+        run: shellcheck -x -P SCRIPTDIR deploy/demo/saiku-demo-deploy.sh deploy/demo/tests/run.sh deploy/demo/tests/shims/*
+      - name: Run deploy script tests
+        run: bash deploy/demo/tests/run.sh
+
   dist:
     name: bundle (saiku-dist zip)
     needs: changes
@@ -260,7 +275,7 @@ jobs:
   # success/skipped — so a real build failure still blocks the merge.
   ci:
     name: ci
-    needs: [changes, build, ui, dist]
+    needs: [changes, build, ui, dist, demo-deploy]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -272,7 +287,8 @@ jobs:
             "changes=${{ needs.changes.result }}" \
             "build=${{ needs.build.result }}" \
             "ui=${{ needs.ui.result }}" \
-            "dist=${{ needs.dist.result }}"; do
+            "dist=${{ needs.dist.result }}" \
+            "demo-deploy=${{ needs.demo-deploy.result }}"; do
             name="${entry%%=*}"
             result="${entry#*=}"
             case "$result" in
