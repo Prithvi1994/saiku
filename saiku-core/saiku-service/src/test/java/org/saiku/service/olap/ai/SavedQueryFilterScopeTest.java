@@ -111,8 +111,7 @@ public class SavedQueryFilterScopeTest {
                 hier("[Store].[Store]", "Store", "Store Name", "[Store].[Store].[Store Name].&[San Jose]"));
         putAxis(tq.getQueryModel(), AxisLocation.FILTER, hier(HIER, "Geography", STATE_LVL, CA, WA));
         assertTrue(SavedQueryFilterScope.narrowToAuthoredScope(
-                        tq,
-                        Collections.singletonList(filter("Store", "Store", "Store Name", FRESNO)))
+                        tq, Collections.singletonList(filter("Store", "Store", "Store Name", FRESNO)))
                 .isEmpty());
     }
 
@@ -123,7 +122,8 @@ public class SavedQueryFilterScopeTest {
         assertTrue(SavedQueryFilterScope.narrowToAuthoredScope(
                         savedQueryWithAuthoredSlicer(),
                         Collections.singletonList(filter("Geography", "Geography", CITY_LVL, SF)))
-                .isEmpty());    }
+                .isEmpty());
+    }
 
     @Test
     public void keepsClientOrderAndStripsDuplicates() {
@@ -208,10 +208,7 @@ public class SavedQueryFilterScopeTest {
         ThinSelection excl = new ThinSelection(ThinSelection.Type.EXCLUSION, List.of(new ThinMember(SF, SF, SF)));
         Map<String, ThinLevel> levels = new LinkedHashMap<>();
         levels.put(STATE_LVL, new ThinLevel(STATE_LVL, STATE_LVL, excl, new ArrayList<>()));
-        putAxis(
-                tq.getQueryModel(),
-                AxisLocation.FILTER,
-                new ThinHierarchy(HIER, "Geography", "Geography", levels));
+        putAxis(tq.getQueryModel(), AxisLocation.FILTER, new ThinHierarchy(HIER, "Geography", "Geography", levels));
         assertTrue(SavedQueryFilterScope.narrowToAuthoredScope(
                         tq, Collections.singletonList(filter("Geography", "Geography", STATE_LVL, CA)))
                 .isEmpty());
@@ -224,10 +221,7 @@ public class SavedQueryFilterScopeTest {
         param.setParameterName("stateParam");
         Map<String, ThinLevel> levels = new LinkedHashMap<>();
         levels.put(STATE_LVL, new ThinLevel(STATE_LVL, STATE_LVL, param, new ArrayList<>()));
-        putAxis(
-                tq.getQueryModel(),
-                AxisLocation.FILTER,
-                new ThinHierarchy(HIER, "Geography", "Geography", levels));
+        putAxis(tq.getQueryModel(), AxisLocation.FILTER, new ThinHierarchy(HIER, "Geography", "Geography", levels));
         assertTrue(SavedQueryFilterScope.narrowToAuthoredScope(
                         tq, Collections.singletonList(filter("Geography", "Geography", STATE_LVL, CA)))
                 .isEmpty());
@@ -247,9 +241,9 @@ public class SavedQueryFilterScopeTest {
 
     @Test
     public void nullsAndEmptiesAreSafe() {
-        assertTrue(SavedQueryFilterScope.narrowToAuthoredScope(
-                        null, Collections.singletonList(filter("G", "G", "L", "m")))
-                .isEmpty());
+        assertTrue(
+                SavedQueryFilterScope.narrowToAuthoredScope(null, Collections.singletonList(filter("G", "G", "L", "m")))
+                        .isEmpty());
         assertTrue(SavedQueryFilterScope.narrowToAuthoredScope(savedQueryWithAuthoredSlicer(), null)
                 .isEmpty());
         assertTrue(SavedQueryFilterScope.narrowToAuthoredScope(savedQueryWithAuthoredSlicer(), Collections.emptyList())

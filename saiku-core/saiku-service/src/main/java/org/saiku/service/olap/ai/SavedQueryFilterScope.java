@@ -153,7 +153,9 @@ public final class SavedQueryFilterScope {
                     && selection.getMembers() != null
                     && selection.getParameterName() == null) {
                 for (ThinMember m : selection.getMembers()) {
-                    if (m != null && m.getUniqueName() != null && !m.getUniqueName().isEmpty()) {
+                    if (m != null
+                            && m.getUniqueName() != null
+                            && !m.getUniqueName().isEmpty()) {
                         members.add(m.getUniqueName());
                     }
                 }
