@@ -168,7 +168,7 @@ config() {
 
 state_get() { # key
   local f="$STATE_DIR/$1"
-  [[ -f "$f" ]] && head -n 1 "$f" || true
+  if [[ -f "$f" ]]; then head -n 1 "$f"; fi
 }
 
 state_put() { # key value  (atomic)
