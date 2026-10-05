@@ -27,6 +27,21 @@ export const IMAGE_REPOSITORY = 'saiku';
 /** Must equal the short-sha length docker.yml tags PR builds with (a test pins it). */
 export const SHA_TAG_LENGTH = 7;
 
+/**
+ * `on.pull_request.paths` of docker.yml: a PR that changes none of these publishes NO
+ * image ("Docs-only PRs do not build one"), so waiting for one would only hold the host
+ * lock for nothing. A test pins this list to the workflow file.
+ */
+export const IMAGE_BUILD_PATHS = Object.freeze([
+  'pom.xml',
+  '**/pom.xml',
+  'saiku-*/**',
+  'lib/**',
+  'Dockerfile',
+  'docker/**',
+  '.github/workflows/docker.yml',
+]);
+
 const HEAD_SHA_RE = /^[0-9a-f]{40}$/;
 const SHA_TAG_RE = new RegExp(`^[0-9a-f]{${SHA_TAG_LENGTH}}$`);
 
@@ -59,4 +74,22 @@ export function describeImage(image) {
   } catch {
     return null;
   }
+}
+
+/** The subset of GitHub's `paths` glob syntax docker.yml uses. */
+function matchesRule(file, rule) {
+  if (rule === '**/pom.xml') return file === 'pom.xml' || file.endsWith('/pom.xml');
+  if (rule === 'saiku-*/**') return /^saiku-[^/]+\/./.test(file);
+  if (rule.endsWith('/**')) return file.startsWith(rule.slice(0, -2));
+  return file === rule;
+}
+
+/**
+ * Would docker.yml build (and push) an image for a PR with these changed files? Entries
+ * that are not strings are ignored; a non-array is "nothing changed". File names are data
+ * matched against the rules above, never interpolated anywhere.
+ */
+export function buildsImage(files) {
+  const list = Array.isArray(files) ? files.filter((f) => typeof f === 'string') : [];
+  return list.some((file) => IMAGE_BUILD_PATHS.some((rule) => matchesRule(file, rule)));
 }

@@ -33,7 +33,7 @@ trusted base-branch workflows over ssh.
 | Hostname | `pr-<n>[-api\|-engine].preview.saiku.bi` | `oss-pr-<n>.preview.saiku.bi` (one label under the base, so the existing wildcard certificate covers it) |
 | Concurrency | 5 (design), 4 on the shared box | **3** (`PREVIEW_MAX_ENVS`); the box has 16 GB and also runs up to 4 cloud previews |
 | Idle teardown | 24 h | 24 h (`PREVIEW_IDLE_HOURS`) |
-| Images | per component, `develop` fallback for unchanged ones | one image, **no fallback** (a PR without its image is not previewed) |
+| Images | per component, `develop` fallback for unchanged ones | one image, **no fallback**: a PR without its image is not previewed (docs-only PRs get a quiet "NO PREVIEW", a PR whose build is late gets a bounded wait) |
 | Seeding | database migrations + tenants + key hashes | none: the container seeds itself; a random admin password is rendered per environment |
 | Eligibility | Hive bot logins, `preview` label, `/preview` | the same, with `spicule-hive[bot]` as the default Hive login (`PREVIEW_AUTHORS`) |
 
@@ -51,7 +51,12 @@ implementation, kept structurally identical so a fix there can be ported mechani
 3. It waits up to 20 minutes for `ghcr.io/spiculedata/saiku:<7-hex head sha>` to exist
    (`docker manifest inspect` with the box's own GHCR login). If it never appears the
    run fails with *"image not ready, comment /preview after the docker build for this
-   commit has finished"*; no other image is ever substituted.
+   commit has finished"*; no other image is ever substituted. One exception, to avoid
+   holding the host lock for 20 minutes for nothing: `docker.yml` only builds a PR image
+   when the PR touches its `pull_request.paths` ("docs-only PRs do not build one"), so when
+   the image is missing the lifecycle asks GitHub for the PR's changed files and, if none
+   is a built path (`IMAGE_BUILD_PATHS`, pinned to `docker.yml` by a test), posts
+   **NO PREVIEW** (not a failure) and does not wait.
 4. `render-env.sh` writes a 0600 env file (project, image, hostname, random admin
    password), `docker compose up -d --wait` starts the container and waits for its
    healthcheck (`/rest/saiku/info`).
@@ -132,8 +137,8 @@ recorded so a later cloud fix can be diffed and ported.
 | `.github/scripts/preview-guard.mjs` | same path | `8700834` | project grammar `saiku-oss-pr-<n>`, own state dir, label-scoped image prune, base-domain validation; variants and seed removed |
 | `.github/scripts/preview-host.mjs` | same path | `8700834` | one image, no seed step, `up` raises a typed step error |
 | `.github/scripts/preview-lifecycle.mjs` | same path | `12ff565` | defaults (3 envs, 20 min image wait), single image in the registry, new comment |
-| `.github/scripts/preview-ctl.mjs` | same path | `12ff565` | `waitForImage` replaces `resolveImages`; no seed, no changed-files provider |
-| `.github/scripts/preview-images.mjs` | same path | `a376975` | reduced to one image and the 7-hex grammar |
+| `.github/scripts/preview-ctl.mjs` | same path | `12ff565` | `waitForImage` replaces `resolveImages` (changed files only decide "no image will ever exist"); no seed |
+| `.github/scripts/preview-images.mjs` | same path | `a376975` | reduced to one image and the 7-hex grammar; `IMAGE_BUILD_PATHS` replaces the per-component path rules |
 | `.github/scripts/preview-command.mjs` | same path | `152046d` | header only |
 | `.github/scripts/preview-activity.mjs` | same path | `152046d` | header only |
 | `.github/scripts/preview-creds.mjs` | same path | `8700834` | three credential keys |

@@ -14,10 +14,12 @@ import { fileURLToPath } from 'node:url';
 import { IMAGE_SOURCE_LABEL } from './preview-guard.mjs';
 
 import {
+  IMAGE_BUILD_PATHS,
   IMAGE_REGISTRY,
   IMAGE_REPOSITORY,
   SHA_TAG_LENGTH,
   assertImageTag,
+  buildsImage,
   describeImage,
   imageRef,
   prImageTag,
@@ -69,4 +71,44 @@ test('the image prune label is one docker.yml stamps on every image (docker/meta
   assert.match(workflow, /labels: \$\{\{ steps\.meta\.outputs\.labels \}\}/);
   // metadata-action sets org.opencontainers.image.source from the repository URL.
   assert.equal(IMAGE_SOURCE_LABEL, 'org.opencontainers.image.source=https://github.com/spiculedata/saiku');
+});
+
+test('IMAGE_BUILD_PATHS are exactly the paths docker.yml builds a PR image for', () => {
+  const workflow = readFileSync(join(root, '.github', 'workflows', 'docker.yml'), 'utf8');
+  const block = /pull_request:\n(?:.*\n)*?\s+paths:\n((?:\s+- .+\n)+)/.exec(workflow)?.[1] ?? '';
+  const paths = block.split('\n').map((l) => l.replace(/^\s+- /, '').replace(/^"|"$/g, '')).filter(Boolean);
+  assert.deepEqual(paths, [...IMAGE_BUILD_PATHS], 'docker.yml pull_request.paths drifted: update IMAGE_BUILD_PATHS');
+});
+
+test('buildsImage matches what the docker workflow would build, and nothing else', () => {
+  for (const yes of [
+    'pom.xml',
+    'saiku-core/saiku-service/pom.xml',
+    'saiku-ui/src/app.css',
+    'saiku-webapp/src/main/webapp/WEB-INF/x.xml',
+    'lib/repo/x.jar',
+    'Dockerfile',
+    'docker/saiku-entrypoint',
+    '.github/workflows/docker.yml',
+  ]) assert.equal(buildsImage([yes]), true, yes);
+  for (const no of [
+    'README.md',
+    'docs/ci-images.md',
+    '.github/workflows/ci.yml',
+    '.github/scripts/preview-ctl.mjs',
+    'infra/preview/render-env.sh',
+    'scripts/pr-metrics.mjs',
+    'saiku/x',
+    'saiku-ui',
+    'saikuX/y',
+    'library/x',
+    'Dockerfile.dev',
+    'docker',
+    'xdocker/x',
+    'tests/pom.xml.bak',
+  ]) assert.equal(buildsImage([no]), false, no);
+  assert.equal(buildsImage(['README.md', 'saiku-core/x']), true);
+  assert.equal(buildsImage([]), false);
+  assert.equal(buildsImage(null), false);
+  assert.equal(buildsImage([5, null, {}]), false);
 });

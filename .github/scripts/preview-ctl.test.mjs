@@ -21,8 +21,10 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 
 import {
+  GhChangedFiles,
   GhCommenter,
   ImageNotReadyError,
+  NoImageBuildError,
   RecordingCommenter,
   SYNC_FILES,
   destroyPr,
@@ -46,6 +48,8 @@ const sha = (c) => c.repeat(40);
 const tag = (c) => c.repeat(7);
 const REPO = 'spiculedata/saiku';
 const config = { ...DEFAULTS, maxEnvs: 2 };
+const BUILT = () => ['saiku-core/saiku-service/src/main/java/X.java', 'docs/x.md'];
+const DOCS_ONLY = () => ['docs/x.md', 'README.md', '.github/workflows/ci.yml'];
 const CLOUD = ['saiku-pr-5', 'saiku-pr-5-strict', 'saiku-pr-12', 'saiku-cloud'];
 
 const ev = (over = {}) => ({
@@ -61,14 +65,14 @@ const ev = (over = {}) => ({
   ...over,
 });
 
-function world(state = {}) {
+function world(state = {}, changedFiles = BUILT) {
   const host = new FakeHost({ images: [tag('a'), tag('b'), tag('c'), tag('d')], foreign: [...CLOUD], ...state });
   const commenter = new RecordingCommenter();
   return {
     host,
     commenter,
-    event: (e, now = T0, cfg = config) => handleEvent({ host, commenter, event: ev(e), config: cfg, now }),
-    reap: (openPrs, now) => runReap({ host, commenter, openPrs, config, now }),
+    event: (e, now = T0, cfg = config) => handleEvent({ host, commenter, event: ev(e), config: cfg, now, changedFiles }),
+    reap: (openPrs, now) => runReap({ host, commenter, openPrs, config, now, changedFiles }),
     registry: () => normaliseRegistry(host.readRegistry()),
     stacks: () => Object.keys(host.state.stacks).sort(),
     lastComment: (pr) => commenter.comments.filter((c) => c.pr === pr).at(-1)?.body ?? '',
@@ -380,12 +384,75 @@ test('an image that never appears fails clearly, leaves nothing running and tell
 test('waitForImage never substitutes another tag and honours a custom wait', () => {
   const host = new FakeHost({ images: ['develop', 'latest'] });
   assert.throws(
-    () => waitForImage({ host, sha: sha('e'), config: { ...DEFAULTS, imageWaitMinutes: 1, imagePollSeconds: 30 } }),
+    () => waitForImage({ host, sha: sha('e'), changedFiles: BUILT, config: { ...DEFAULTS, imageWaitMinutes: 1, imagePollSeconds: 30 } }),
     (err) => err instanceof ImageNotReadyError && err.tag === tag('e'),
   );
   assert.equal(host.state.sleeps.length, 2);
   const asked = host.state.ops.map((o) => o.argv.at(-1));
   assert.ok(asked.every((ref) => ref === `ghcr.io/spiculedata/saiku:${tag('e')}`));
+});
+
+test('a PR that changes nothing docker.yml builds is not previewed, and does not hold the lock waiting', () => {
+  const w = world({ images: [] }, DOCS_ONLY);
+  const r = w.event({});
+  assert.equal(r.exitCode, 0, 'not a failure: there is simply nothing to run');
+  assert.deepEqual(w.host.state.sleeps, [], 'no waiting');
+  assert.deepEqual(w.stacks(), []);
+  assert.deepEqual(w.registry().envs, {});
+  assert.match(w.lastComment(1), /NO PREVIEW/);
+  assert.match(w.lastComment(1), /changes nothing the `docker` workflow builds/);
+  assert.equal(w.host.state.lockOwner, null);
+  assert.equal(w.host.state.ops.some((o) => o.argv.includes('up')), false);
+});
+
+test('an existing image wins: the changed files are not even asked for', () => {
+  const w = world({}, () => {
+    throw new Error('should not be called');
+  });
+  assert.equal(w.event({}).exitCode, 0);
+  assert.deepEqual(w.stacks(), ['saiku-oss-pr-1']);
+});
+
+test('a changed-files lookup failure fails the bring-up instead of guessing', () => {
+  const w = world({ images: [] }, () => {
+    throw new Error('gh: 502');
+  });
+  const r = w.event({});
+  assert.equal(r.exitCode, 1);
+  assert.deepEqual(w.stacks(), []);
+  assert.match(r.annotations.join('\n'), /could not check the image|gh: 502|did not come up/);
+});
+
+test('a missing changed-files provider is an error, not an empty list', () => {
+  const host = new FakeHost({ images: [] });
+  assert.throws(() => waitForImage({ host, sha: sha('a') }), /no changed-files provider configured/);
+  assert.throws(() => waitForImage({ host, sha: sha('a'), changedFiles: DOCS_ONLY }), (e) => e instanceof NoImageBuildError);
+});
+
+test('GhChangedFiles asks for current and previous names, and fails closed', () => {
+  const calls = [];
+  const lister = new GhChangedFiles({ repo: REPO, run: (argv) => { calls.push(argv); return { status: 0, stdout: 'a\nb\n', stderr: '' }; } });
+  assert.deepEqual(lister.list(7), ['a', 'b']);
+  assert.ok(calls[0].includes(`repos/${REPO}/pulls/7/files?per_page=100`));
+  assert.match(calls[0].at(-1), /previous_filename/);
+  assert.throws(() => new GhChangedFiles({ repo: REPO, run: () => ({ status: 1, stdout: '', stderr: 'x' }) }).list(7), /listing the files changed by #7 failed/);
+  assert.throws(() => lister.list(0), /invalid PR number/);
+  assert.throws(() => new GhChangedFiles({ repo: 'bad; repo' }), /invalid repository/);
+});
+
+test('a queued docs-only PR is dropped from promotion quietly, and the next one is promoted', () => {
+  const w = world({ images: [tag('a'), tag('c'), tag('d')] });
+  w.event({ number: 1 });
+  w.event({ number: 2 }, HOURS(0.1));
+  w.event({ number: 3, headSha: sha('b') }, HOURS(0.2));
+  w.event({ number: 4, headSha: sha('c') }, HOURS(0.3));
+  // PR 3 has no image and changes only docs; PR 4's image exists.
+  const files = { 3: DOCS_ONLY, 4: BUILT };
+  const r = runReap({ host: w.host, commenter: w.commenter, openPrs: [3, 4], config: { ...config, maxEnvs: 2 }, now: HOURS(1), changedFiles: (pr) => files[pr]() });
+  assert.deepEqual(r.promotionFailed, []);
+  assert.equal(r.exitCode, 0);
+  assert.deepEqual(r.promoted, [4]);
+  assert.match(w.lastComment(3), /NO PREVIEW/);
 });
 
 test('a registry outage while checking the image is an error, not "not published yet"', () => {
@@ -461,7 +528,7 @@ test('touchPr refreshes lastActivity only when an env exists, and releases the l
 test('collaborator review activity found by the reaper keeps an env that would otherwise be idle', () => {
   const w = world();
   w.event({});
-  const r = runReap({ host: w.host, commenter: w.commenter, openPrs: [1], config, now: HOURS(30), activity: () => ({ 1: HOURS(29) }) });
+  const r = runReap({ host: w.host, commenter: w.commenter, openPrs: [1], config, now: HOURS(30), changedFiles: BUILT, activity: () => ({ 1: HOURS(29) }) });
   assert.deepEqual(r.teardowns, []);
   assert.deepEqual(w.stacks(), ['saiku-oss-pr-1']);
 });
@@ -469,7 +536,7 @@ test('collaborator review activity found by the reaper keeps an env that would o
 test('a failing activity lookup never blocks or breaks the reaper', () => {
   const w = world();
   w.event({});
-  const r = runReap({ host: w.host, commenter: w.commenter, openPrs: [1], config, now: HOURS(30), activity: () => { throw new Error('rate limited'); } });
+  const r = runReap({ host: w.host, commenter: w.commenter, openPrs: [1], config, now: HOURS(30), changedFiles: BUILT, activity: () => { throw new Error('rate limited'); } });
   assert.deepEqual(r.teardowns.map((t) => t.reason), ['idle']);
 });
 

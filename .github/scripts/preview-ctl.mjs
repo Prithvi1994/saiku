@@ -22,6 +22,7 @@ import { pathToFileURL } from 'node:url';
 import { GhActivity } from './preview-activity.mjs';
 import { deliverCredentials, parseCredentials } from './preview-creds.mjs';
 import { SELFCHECK_TIMEOUT_SECONDS, assertPrNumber, parseProject, projectForPr } from './preview-guard.mjs';
+import { buildsImage } from './preview-images.mjs';
 import { FakeHost, SshHost } from './preview-host.mjs';
 import {
   COMMENT_MARKER,
@@ -113,16 +114,32 @@ export class ImageNotReadyError extends Error {
   }
 }
 
+/** The PR changes nothing docker.yml builds, so no image will ever exist for it. */
+export class NoImageBuildError extends Error {
+  constructor() {
+    super('this PR changes nothing the docker workflow builds, so no image exists for it');
+    this.name = 'NoImageBuildError';
+  }
+}
+
+/** No provider wired: refuse to guess which paths a PR changed. */
+const noChangedFiles = () => {
+  throw new Error('no changed-files provider configured');
+};
+
 const positive = (value, fallback) => (Number.isFinite(Number(value)) && Number(value) > 0 ? Number(value) : fallback);
 
 /**
  * Wait (bounded) for the PR's per-SHA image, on the host side where the GHCR
  * login is. There is no fallback image: a preview of anything but this commit
- * would validate the wrong code.
+ * would validate the wrong code. `changedFiles()` is only called when the image is
+ * missing: a PR that changes nothing docker.yml builds will never get one, and waiting
+ * for it would hold the host lock for the whole window.
  */
-export function waitForImage({ host, sha, config = DEFAULTS, log = silent }) {
+export function waitForImage({ host, sha, changedFiles = noChangedFiles, config = DEFAULTS, log = silent }) {
   const tag = imageTagFor(sha);
   if (host.manifestExists(tag)) return { tag };
+  if (!buildsImage(changedFiles())) throw new NoImageBuildError();
 
   const waitMinutes = positive(config.imageWaitMinutes, DEFAULTS.imageWaitMinutes);
   const pollSeconds = positive(config.imagePollSeconds, DEFAULTS.imagePollSeconds);
@@ -138,6 +155,9 @@ export function waitForImage({ host, sha, config = DEFAULTS, log = silent }) {
 const firstLine = (err) => String(err.message).split('\n')[0];
 
 const failureFor = (pr, stage, err) => {
+  if (err instanceof NoImageBuildError) {
+    return { reason: 'no-image-build', benign: true, message: `PR #${pr}: ${err.message}.` };
+  }
   if (err instanceof ImageNotReadyError) {
     return { reason: 'image-not-ready', message: `PR #${pr}: ${err.message}.` };
   }
@@ -180,7 +200,13 @@ function bringUp(ctx, registry, d) {
   try {
     host.sync(SYNC_FILES, { cwd: ctx.syncRoot });
     stage = 'resolve';
-    const image = waitForImage({ host, sha: d.headSha, config: ctx.config, log });
+    const image = waitForImage({
+      host,
+      sha: d.headSha,
+      changedFiles: () => ctx.changedFiles(d.pr),
+      config: ctx.config,
+      log,
+    });
     log(`#${d.pr}: image ${image.tag}`);
     next = apply({ ...d, image }, next, { now });
     host.writeRegistry(next);
@@ -230,6 +256,9 @@ function promote(ctx, registry, open) {
     if (result.ok) {
       promoted.push(pick.pr);
       post(commenter, pick.pr, comment({ ...d, image: result.image }, { config, registry: current }), log, failures);
+    } else if (result.failure.benign) {
+      // Nothing to run for this PR (e.g. a docs-only change): say so, do not count a failure.
+      post(commenter, pick.pr, comment({ action: 'unbuilt', pr: pick.pr, reason: result.failure.reason }, { config, registry: current }), log, failures);
     } else {
       failed.push(pick.pr);
       const { reason, message } = result.failure;
@@ -247,9 +276,9 @@ function promote(ctx, registry, open) {
  * Handle one pull_request event.
  * @returns {{decision: object, exitCode: number, ...}}
  */
-export function handleEvent({ host, commenter, event, config = DEFAULTS, now, log = silent, syncRoot }) {
+export function handleEvent({ host, commenter, event, config = DEFAULTS, now, log = silent, syncRoot, changedFiles = noChangedFiles }) {
   const failures = [];
-  const ctx = { host, commenter, config, now, log, failures, syncRoot };
+  const ctx = { host, commenter, config, now, log, failures, syncRoot, changedFiles };
   host.lock();
   try {
     let registry = normaliseRegistry(host.readRegistry());
@@ -308,6 +337,9 @@ export function handleEvent({ host, commenter, event, config = DEFAULTS, now, lo
         if (result.ok) {
           d = { ...d, image: result.image };
           post(commenter, d.pr, comment(d, { config, registry }), log, failures);
+        } else if (result.failure.benign) {
+          log(`#${d.pr}: ${result.failure.message}`);
+          post(commenter, d.pr, comment({ action: 'unbuilt', pr: d.pr, reason: result.failure.reason }, { config, registry }), log, failures);
         } else {
           exitCode = 1;
           const { reason, message } = result.failure;
@@ -369,9 +401,9 @@ function applyActivity(registry, activity, now, log) {
  * image pruning, queue promotion. Exits non-zero (loudly) when the disk is
  * still too full after pruning, so a stuck host shows up as a red run.
  */
-export function runReap({ host, commenter, openPrs, config = DEFAULTS, now, log = silent, syncRoot, activity }) {
+export function runReap({ host, commenter, openPrs, config = DEFAULTS, now, log = silent, syncRoot, activity, changedFiles = noChangedFiles }) {
   const failures = [];
-  const ctx = { host, commenter, config, now, log, failures, syncRoot };
+  const ctx = { host, commenter, config, now, log, failures, syncRoot, changedFiles };
   host.lock();
   try {
     let registry = normaliseRegistry(host.readRegistry());
@@ -467,6 +499,34 @@ export class GhCommenter {
   }
 }
 
+const FILE_LIST_CAP = 4000;
+
+/** The PR's changed file names (current and, for renames, previous), via the gh CLI. */
+export class GhChangedFiles {
+  constructor({ repo, run = ghRun }) {
+    if (!REPO_RE.test(repo ?? '')) throw new Error('GhChangedFiles: invalid repository');
+    this.repo = repo;
+    this.run = run;
+  }
+
+  list(pr) {
+    assertPrNumber(pr);
+    const res = this.run([
+      'gh',
+      'api',
+      '--paginate',
+      `repos/${this.repo}/pulls/${pr}/files?per_page=100`,
+      '--jq',
+      '.[] | .filename, (.previous_filename // empty)',
+    ]);
+    if (res.status !== 0) throw new Error(`listing the files changed by #${pr} failed: ${res.stderr}`);
+    return res.stdout.split('\n').filter(Boolean).slice(0, FILE_LIST_CAP);
+  }
+}
+
+/** Fixed file list for the fake host (`--changed-files file.json`) and tests. */
+export const staticChangedFiles = (files = []) => () => files;
+
 export class RecordingCommenter {
   constructor(log = silent) {
     this.comments = [];
@@ -542,6 +602,15 @@ function buildCommenter(flags, env, log) {
   return new GhCommenter({ repo: env.GITHUB_REPOSITORY });
 }
 
+/** Fake host: a JSON array from --changed-files (default: a built path). Real host: the GitHub API. */
+function buildChangedFiles(flags, env) {
+  if (flags.host === 'fake') {
+    return staticChangedFiles(flags['changed-files'] ? readJson(flags['changed-files']) : ['saiku-core/x.java']);
+  }
+  const lister = new GhChangedFiles({ repo: env.GITHUB_REPOSITORY });
+  return (pr) => lister.list(pr);
+}
+
 function summaryMarkdown(command, result) {
   const lines = [`### preview ${command}`, ''];
   if (command === 'touch') {
@@ -586,6 +655,7 @@ export function main(argv, env = process.env, io = { out: (s) => process.stdout.
   const host = buildHost(flags, env, log);
   const commenter = buildCommenter(flags, env, log);
   const syncRoot = flags['sync-root'] ?? process.cwd();
+  const changedFiles = ['event', 'reap'].includes(command) ? buildChangedFiles(flags, env) : undefined;
 
   if (io.installSignalHandlers) {
     // A cancelled run (concurrency, timeout) must not leave the host lock held.
@@ -609,10 +679,10 @@ export function main(argv, env = process.env, io = { out: (s) => process.stdout.
     result = touchPr({ host, pr: Number(flags.pr), at: flags.at, now, log });
   } else if (command === 'event') {
     const event = eventFromGithub(readJson(flags['github-event']));
-    result = handleEvent({ host, commenter, event, config, now, log, syncRoot });
+    result = handleEvent({ host, commenter, event, config, now, log, syncRoot, changedFiles });
   } else {
     const activity = flags.activity === 'github' ? new GhActivity({ repo: env.GITHUB_REPOSITORY }).lookup : undefined;
-    result = runReap({ host, commenter, openPrs: readJson(flags['open-prs']), config, now, log, syncRoot, activity });
+    result = runReap({ host, commenter, openPrs: readJson(flags['open-prs']), config, now, log, syncRoot, activity, changedFiles });
   }
 
   if (flags.out) writeFileSync(flags.out, `${JSON.stringify(result, null, 2)}\n`);

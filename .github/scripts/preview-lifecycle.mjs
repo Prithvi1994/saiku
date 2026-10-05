@@ -499,6 +499,7 @@ const STATUS = {
   queued: 'QUEUED',
   down: 'TORN DOWN',
   failed: 'FAILED TO START',
+  unbuilt: 'NO PREVIEW',
 };
 
 /** Where validators learn how to fetch credentials. Never the credentials. */
@@ -555,6 +556,13 @@ export function comment(d, { config = DEFAULTS, registry } = {}) {
               'Once the `docker` build for this commit has finished, comment `/preview`.',
           ]
         : []),
+    );
+  } else if (d.action === 'unbuilt') {
+    lines.push(
+      '',
+      'This PR changes nothing the `docker` workflow builds (poms, `saiku-*/`, `lib/`, `Dockerfile`, ' +
+        '`docker/`), so no image exists for it and there is nothing to run. ' +
+        'Push a change to one of those paths and the preview is created automatically.',
     );
   } else if (d.action === 'down') {
     lines.push(

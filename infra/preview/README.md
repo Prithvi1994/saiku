@@ -37,6 +37,9 @@ A preview is rebuilt on every push, torn down when the PR closes or merges, or a
 review. At most 3 run at once (`PREVIEW_MAX_ENVS`); further PRs are queued with a visible
 position and promoted hourly. The sticky PR comment says which state a PR is in.
 
+A PR that changes nothing `docker.yml` builds (docs, CI, scripts only) has no image and gets a
+quiet **NO PREVIEW** comment instead of a wait; it is created automatically on a push that touches a built path.
+
 If the image for the head commit is not in GHCR yet (the `docker` build is still running)
 the run waits up to 20 minutes, then fails with *"image not ready, comment /preview after
 the docker build for this commit has finished"*.
