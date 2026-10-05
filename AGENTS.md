@@ -120,6 +120,18 @@ CI (`.github/workflows/ci.yml`) runs `mvn -B -ntp -DskipITs=false verify` on **u
 - **Svelte 5 effect discipline**: never call a state-writing helper synchronously from inside `$effect` if the helper also reads the same `$state`. The effect's dep-tracking captures the read, the write inside the same tick re-queues the effect, and Svelte bails after 128 iterations with `effect_update_depth_exceeded` — visible to the user as a stuck UI state AND every event handler in the component going inert (the whole reactivity graph tears down). Defer with `queueMicrotask(() => fn(...))` or wrap in `untrack(() => ...)` from `svelte`. Diagnostic signal: if multiple buttons in one modal/panel stop working at once, check the browser console for that error code before debugging the buttons individually.
 - **Mondrian 4 virtual cubes**: when adding a MeasureGroup to a virtual cube, declare `<NoLink dimension="X"/>` for every dim that doesn't apply — Mondrian doesn't infer it, the cube fails to load with "No link for dimension X in measure group Y". The **canonical, git-tracked FoodMart schema is `saiku-launcher/src/main/resources/seed/FoodMart4.xml`** — edit that. The runtime copy `saiku-home/data/FoodMart4.xml` is under the gitignored `saiku-home/` and is only ever *seeded-if-absent* (`stageSeedAssets` never overwrites an existing home to preserve user edits), so an **established local home never picks up seed changes** — that's how a dev home drifted 2,000+ lines behind (saiku#1662). After editing the seed, re-materialise every local home you test against: delete `saiku-home/data/FoodMart4.xml` (or `cp` the seed over it) and relaunch. The launcher now prints a boot-time WARNING when the two diverge.
 
+## Preview environments
+
+Same-repo PRs by the Hive bot (`PREVIEW_AUTHORS`), PRs labelled `preview`, and PRs a collaborator `/preview`s get a throwaway container of their own head-sha image on the shared preview box, at `https://oss-pr-<n>.preview.saiku.bi` (tailnet only). The lifecycle is `.github/scripts/preview-*.mjs` driven by `preview-env.yml`, `preview-command.yml` and the hourly `preview-reaper.yml`; the stack, env renderer and self-check are in `infra/preview/`. Design, security model and the provenance of each file (ported from saiku-cloud): `docs/decisions/ci-preview-environments.md`.
+
+```bash
+node --test .github/scripts/preview-*.test.mjs          # lifecycle, guard, workflow-shape tests
+infra/preview/tests/test-compose.sh                      # compose render + negative controls (needs docker compose)
+infra/preview/tests/test-render-env.sh && infra/preview/tests/test-selfcheck.sh
+```
+
+Rules that cost time elsewhere and are pinned by tests here: the preview workflows run from the **base branch** and never check out or execute PR code or interpolate PR text into a shell; every host command is built only by `preview-guard.mjs` (project grammar `saiku-oss-pr-<n>`, so the saiku-cloud previews on the same box are untouchable); secrets are masked and only written to 0600 files; action pins are full 40-hex commits. The host state is `/var/lib/saiku-preview-oss` (provisioned from the saiku-cloud Ansible role); a preview needs `SAIKU_ADMIN_PASSWORD` (random) and uses `SAIKU_SEED=true`, not `SAIKU_DEMO`.
+
 ## Agent resources
 
 - **Skills** — `.claude/skills/<name>/SKILL.md`: step-by-step workflows for recurring repo tasks (rebuilding the launcher after UI changes, cutting a release). Claude Code loads them automatically; other agents can read them as plain markdown.

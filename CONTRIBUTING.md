@@ -169,6 +169,18 @@ agent. The process below still governs who reviews what.
 - If a review sits idle for more than a week, ping the PR politely.
   We're a small team; things fall through.
 
+### Preview environments
+
+A PR from a branch in this repository (not a fork) gets a throwaway preview at
+`https://oss-pr-<n>.preview.saiku.bi` (reachable from the tailnet) when it is authored
+by the Hive bot, carries the `preview` label, or a maintainer comments `/preview` on it.
+It is rebuilt on every push (once the PR's `docker` build has published its image),
+removed when the PR closes and after 24 hours without activity, and its status and URL
+are kept in one sticky PR comment. Credentials are never posted; validators fetch them
+as described in [`infra/preview/README.md`](./infra/preview/README.md#credentials-for-validators).
+Forks never get a preview. How it works and why:
+[`docs/decisions/ci-preview-environments.md`](./docs/decisions/ci-preview-environments.md).
+
 Reviews are meant to be a conversation, not a gate. If a reviewer
 asks for a change you disagree with, push back with reasoning —
 the review usually improves for it. If we can't reach agreement,
