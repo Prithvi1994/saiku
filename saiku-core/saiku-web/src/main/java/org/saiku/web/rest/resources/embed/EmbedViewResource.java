@@ -167,10 +167,9 @@ public class EmbedViewResource {
         // members. Everything else (a re-point of a non-forced rows/columns/pages axis, an additive
         // deeper level, an out-of-scope member) is dropped fail-closed and the query runs as
         // authored. Unreadable / unparseable / MDX-mode saved query ⇒ no overrides at all.
-        final java.util.List<AiFilterSelection> overrides =
-                filters == null || filters.isEmpty()
-                        ? java.util.Collections.emptyList()
-                        : SavedQueryFilterScope.narrowToAuthoredScope(loadPinnedSavedQuery(g), filters);
+        final java.util.List<AiFilterSelection> overrides = filters == null || filters.isEmpty()
+                ? java.util.Collections.emptyList()
+                : SavedQueryFilterScope.narrowToAuthoredScope(loadPinnedSavedQuery(g), filters);
         try {
             Response result = sessionService.runAs(g.ownerUser, g.ownerRoles, () -> {
                 AiSavedQueryRequest sreq = new AiSavedQueryRequest();

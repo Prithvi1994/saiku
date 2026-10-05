@@ -203,7 +203,8 @@ public class EmbedViewResourceTest {
                 "homes/admin/sales.saiku", null, overrides(filter("Store", "Store", "Store Name", FRESNO)));
 
         assertEquals(200, r.getStatus());
-        assertTrue(ai.lastSavedRequest.getFilters() == null || ai.lastSavedRequest.getFilters().isEmpty());
+        assertTrue(ai.lastSavedRequest.getFilters() == null
+                || ai.lastSavedRequest.getFilters().isEmpty());
     }
 
     @Test
@@ -217,7 +218,8 @@ public class EmbedViewResourceTest {
                 "homes/admin/sales.saiku", null, overrides(filter("Geography", "Geography", "City", SF)));
 
         assertEquals(200, r.getStatus());
-        assertTrue(ai.lastSavedRequest.getFilters() == null || ai.lastSavedRequest.getFilters().isEmpty());
+        assertTrue(ai.lastSavedRequest.getFilters() == null
+                || ai.lastSavedRequest.getFilters().isEmpty());
     }
 
     @Test
@@ -232,7 +234,8 @@ public class EmbedViewResourceTest {
                 "homes/admin/sales.saiku", null, overrides(filter("Geography", "Geography", "State", CA)));
 
         assertEquals(200, r.getStatus());
-        assertTrue(ai.lastSavedRequest.getFilters() == null || ai.lastSavedRequest.getFilters().isEmpty());
+        assertTrue(ai.lastSavedRequest.getFilters() == null
+                || ai.lastSavedRequest.getFilters().isEmpty());
     }
 
     @Test
