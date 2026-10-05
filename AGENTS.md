@@ -103,6 +103,8 @@ The PAT must be a **classic** token with the `read:packages` scope — [GitHub o
 
 CI (`.github/workflows/ci.yml`) runs `mvn -B -ntp -DskipITs=false verify` on **ubuntu-latest** against JDK 22 — Linux only, no macOS runner. (All build workflows moved 21→22 for `saiku-proptest`; artifacts still target release 21.) A separate path-filtered `ui` job runs `npm run check` + vitest on Node 20. The `dist` job uploads `saiku-dist-<version>.zip` (launcher fat-JAR + `dist/run.sh` + `dist/run.bat` + `dist/README.md`) as an artifact. Branch protection requires only the aggregate `ci` check, which passes when upstream jobs succeed *or* are legitimately path-skipped.
 
+**Per-PR images and CI scripts:** `docker.yml` also builds same-repo PRs to `development` (path-filtered) and pushes `ghcr.io/spiculedata/saiku:pr-<n>` plus the bare 7-hex PR head SHA; fork and Dependabot PRs build only. `ghcr-tag-retention.yml` sweeps those tags weekly (dry run unless `apply` or `GHCR_RETENTION_APPLY=true`). The `scripts` job in `ci.yml` runs the python unittests in `.github/scripts/` (retention policy + a guard that every hex `uses:` pin is a full 40-char SHA). Tag grammar and rules: `docs/ci-images.md`.
+
 **`mvn verify` builds `saiku-ui` but does not test it.** `saiku-ui` is not a reactor module, yet `saiku-webapp`'s `frontend-maven-plugin` runs `install-node-and-npm` → `npm ci` → `npm run build` so the war overlay gets a bundle. Expect a Node toolchain download and a long `saiku-webapp` phase on a cold build (~34 min observed). UI tests run only via the `ui` CI job or `npm test` inside `saiku-ui/`.
 
 ## Conventions specific to this repo
