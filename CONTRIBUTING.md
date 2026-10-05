@@ -114,6 +114,18 @@ Bugfixes come with a regression test. New features come with
 enough coverage that a future refactor can trust the tests. Ask
 in the PR if you're unsure how much is enough — happy to discuss.
 
+**Flaky tests.** CI retries a failing test once and records it; a pass on
+retry is a flake with a deadline, not a green light to ignore it. See
+[`docs/ci-flakes.md`](./docs/ci-flakes.md). When CI fails, the `ci feedback`
+bot comment on your PR names the first real error and a one-line repro
+([`docs/ci-feedback.md`](./docs/ci-feedback.md)).
+
+**Acceptance specs.** A PR that closes an issue ships
+`acceptance/<issue>/spec.json` — the issue's acceptance criteria as a
+runnable check — unless it only changes docs or tests (label
+`acceptance-waived`). The gate is switched on per issue number by
+maintainers; see [`acceptance/README.md`](./acceptance/README.md).
+
 ## Code style
 
 - **Palantir Java Format** enforced via
